@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Biryani Blitz — Outreach</title>
+  <!-- Helvetica Neue / Pro: uses installed fonts on macOS; no free webfont for "Pro" — fallbacks below -->
+  <style>
+    :root {
+      --bg: #080a0e;
+      --glass: rgba(255,255,255,0.06);
+      --glass-strong: rgba(255,255,255,0.1);
+      --border: rgba(255,255,255,0.14);
+      --accent: #ff7c38;
+      --accent-dim: rgba(255,124,56,0.2);
+      --text: rgba(255,255,255,0.94);
+      --muted: rgba(255,255,255,0.48);
+      --user-bubble: rgba(255,124,56,0.18);
+      --bot-bubble: rgba(255,255,255,0.07);
+      --radius: 18px;
+      --radius-sm: 12px;
+      --font: "Helvetica Neue", "Helvetica Neue Pro", "HelveticaNeue-Medium", "HelveticaNeue", Helvetica, Arial, ui-sans-serif, system-ui, sans-serif;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 70% 50% at 15% -10%, rgba(255,124,56,0.14), transparent 55%),
+        radial-gradient(ellipse 50% 45% at 90% 100%, rgba(90,60,180,0.12), transparent 50%),
+        radial-gradient(ellipse 40% 35% at 50% 40%, rgba(255,255,255,0.04), transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .app {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 0.75rem 1rem 1rem;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.5rem 0 0.75rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 0.5rem;
+    }
+    header h1 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    header h1 span {
+      display: block;
+      font-size: 0.58rem;
+      font-weight: 600;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.15rem;
+    }
+    header nav a {
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-decoration: none;
+      padding: 0.35rem 0.65rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--glass);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+    header nav a:hover { color: var(--text); border-color: rgba(255,124,56,0.35); }
+
+    .chat-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.5rem 0 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+    }
+
+    .msg {
+      max-width: 92%;
+      padding: 0.85rem 1rem;
+      border-radius: var(--radius);
+      font-size: 0.88rem;
+      line-height: 1.45;
+      border: 1px solid var(--border);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      animation: pop 0.35s ease;
+    }
+    @keyframes pop {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .msg.user {
+      align-self: flex-end;
+      background: var(--user-bubble);
+      border-color: rgba(255,124,56,0.28);
+    }
+    .msg.bot {
+      align-self: flex-start;
+      background: var(--bot-bubble);
+    }
+    .msg.bot .label {
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--accent);
+      margin-bottom: 0.45rem;
+      font-weight: 600;
+    }
+    .msg p { margin-bottom: 0.5rem; }
+    .msg p:last-child { margin-bottom: 0; }
+
+    .panel {
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--glass);
+      padding: 1rem 1.1rem;
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+    }
+
+    .tier-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 0.45rem;
+      margin-top: 0.65rem;
+    }
+    .tier-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.45rem;
+      font-size: 0.72rem;
+      line-height: 1.35;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 0.35rem 0.25rem;
+      border-radius: var(--radius-sm);
+      transition: background 0.15s;
+    }
+    .tier-item:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+    .tier-item input { accent-color: var(--accent); margin-top: 0.15rem; flex-shrink: 0; }
+    .tier-item strong { color: var(--text); font-weight: 600; }
+
+    label.field {
+      display: block;
+      font-size: 0.58rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+      margin: 0.65rem 0 0.35rem;
+      font-weight: 600;
+    }
+    textarea, input[type="text"], input[type="password"], input[type="number"] {
+      width: 100%;
+      font-family: var(--font);
+      font-size: 0.82rem;
+      padding: 0.65rem 0.75rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: rgba(0,0,0,0.35);
+      color: var(--text);
+      outline: none;
+    }
+    textarea:focus, input:focus {
+      border-color: rgba(255,124,56,0.45);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+    textarea { min-height: 88px; resize: vertical; }
+
+    .row2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.65rem;
+    }
+    @media (max-width: 560px) { .row2 { grid-template-columns: 1fr; } }
+
+    .toggle {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin: 0.5rem 0;
+      cursor: pointer;
+    }
+    .toggle input { accent-color: var(--accent); width: 1rem; height: 1rem; }
+
+    .composer {
+      border-top: 1px solid var(--border);
+      padding-top: 0.75rem;
+      background: linear-gradient(180deg, transparent, rgba(8,10,14,0.92) 25%);
+    }
+    .composer-inner {
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--glass-strong);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      padding: 0.85rem 1rem 1rem;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+      align-items: center;
+    }
+    button.primary {
+      font-family: var(--font);
+      font-size: 0.82rem;
+      font-weight: 600;
+      padding: 0.55rem 1.25rem;
+      border-radius: 999px;
+      border: 1px solid rgba(255,124,56,0.45);
+      background: linear-gradient(180deg, rgba(255,124,56,0.35), rgba(255,124,56,0.15));
+      color: #fff;
+      cursor: pointer;
+    }
+    button.primary:disabled { opacity: 0.45; cursor: not-allowed; }
+    button.ghost {
+      font-family: var(--font);
+      font-size: 0.78rem;
+      padding: 0.5rem 1rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    button.ghost:hover { color: var(--text); }
+
+    .status {
+      font-size: 0.72rem;
+      color: var(--muted);
+      flex: 1;
+      min-width: 140px;
+    }
+    .status strong { color: #8ee4a8; font-weight: 600; }
+
+    .log-preview {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.62rem;
+      color: var(--muted);
+      max-height: 100px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin-top: 0.5rem;
+      padding: 0.5rem;
+      border-radius: var(--radius-sm);
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1><span>Biryani Blitz</span>Outreach assistant</h1>
+      <nav>
+        <a href="/contacts.html">Contacts viewer</a>
+      </nav>
+    </header>
+
+    <div class="chat-scroll" id="chat"></div>
+
+    <div class="composer">
+      <div class="composer-inner panel">
+        <div class="msg bot" style="margin-bottom:0.75rem;border:none;background:transparent;padding:0;backdrop-filter:none;">
+          <div class="label">Configure run</div>
+          <p style="font-size:0.8rem;color:var(--muted);margin-bottom:0.75rem;">
+            Paste <strong>one school per line</strong>, or CSV: <code style="color:var(--accent);">name, city, entrepreneurship center</code>.
+            Tick which <strong>tiers</strong> to search for, then send.
+          </p>
+
+          <label class="toggle">
+            <input type="checkbox" id="useBuiltIn" />
+            Use built-in 70-school list (ignores CSV)
+          </label>
+
+          <label class="field">Schools (CSV or one per line)</label>
+          <textarea id="schoolsCsv" placeholder="New York University (NYU), New York, NY, Entrepreneurial Institute
+UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
+
+          <label class="field">Contact tiers to find</label>
+          <div class="tier-grid" id="tierGrid"></div>
+
+          <label class="field">Google AI Studio API key (optional if env already set)</label>
+          <input type="password" id="apiKey" placeholder="Paste key for this session" autocomplete="off" />
+
+          <div class="row2">
+            <div>
+              <label class="field">Output JSON</label>
+              <input type="text" id="outPath" value="output/gemini_contacts.json" />
+            </div>
+            <div>
+              <label class="field">Max schools (blank = all in list)</label>
+              <input type="number" id="maxSchools" placeholder="e.g. 3" min="1" />
+            </div>
+          </div>
+          <div class="row2">
+            <div>
+              <label class="field">Resume — start index</label>
+              <input type="number" id="startIdx" value="0" min="0" />
+            </div>
+            <div>
+              <label class="field">Pages / school · delay (ms)</label>
+              <div class="row2" style="margin-top:0">
+                <input type="number" id="pagesPerSchool" value="5" min="1" max="20" />
+                <input type="number" id="delayMs" value="2800" min="500" />
+              </div>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button type="button" class="primary" id="btnSend">Send &amp; run</button>
+            <button type="button" class="ghost" id="btnStop" disabled>Stop</button>
+            <span class="status" id="statusLine">…</span>
+          </div>
+          <div class="log-preview" id="logPreview"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const TIERS = [
+      [1, "Student Union / commercial", "Vendor & contract gatekeepers"],
+      [2, "Student life / experience", "VP / director-level"],
+      [3, "Student government", "Board / advocacy"],
+      [4, "Entrepreneurship", "Venture centers"],
+      [5, "Cultural / South Asian", "Multicultural affairs"],
+      [6, "Sustainability", "Green vendor lists"],
+      [7, "Food truck / mobile", "Union coordinators"],
+      [8, "Campus dining", "Auxiliary dining"],
+      [9, "EHS / food safety", "Permits & compliance"],
+    ];
+
+    const grid = document.getElementById("tierGrid");
+    TIERS.forEach(([n, title, sub]) => {
+      const id = "t" + n;
+      const lab = document.createElement("label");
+      lab.className = "tier-item";
+      lab.innerHTML = `<input type="checkbox" id="${id}" value="${n}" checked />
+        <span><strong>T${n}</strong> — ${title}<br/><span style="opacity:0.75">${sub}</span></span>`;
+      grid.appendChild(lab);
+    });
+
+    const chat = document.getElementById("chat");
+
+    function addMsg(role, html) {
+      const el = document.createElement("div");
+      el.className = "msg " + (role === "user" ? "user" : "bot");
+      if (role === "bot") el.innerHTML = '<div class="label">Assistant</div>';
+      const inner = document.createElement("div");
+      inner.innerHTML = html;
+      el.appendChild(inner);
+      chat.appendChild(el);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    addMsg("bot", "<p>Hi — I’m the outreach runner. Configure schools and tiers below, then <strong>Send & run</strong>. I’ll search the web, open campus pages, and extract contacts with Gemini.</p>");
+
+    async function refreshStatus() {
+      try {
+        const r = await fetch("/api/status");
+        const j = await r.json();
+        const run = j.running ? "Running (pid " + j.pid + ")" : "Idle";
+        const k = j.hasKey ? "Server has API key in env" : "Paste a key below if needed";
+        document.getElementById("statusLine").innerHTML = "Status: <strong>" + run + "</strong> · " + k;
+        document.getElementById("btnSend").disabled = j.running;
+        document.getElementById("btnStop").disabled = !j.running;
+      } catch {
+        document.getElementById("statusLine").textContent = "Cannot reach API — is the server running?";
+      }
+    }
+
+    async function refreshLogs() {
+      try {
+        const r = await fetch("/api/logs");
+        const j = await r.json();
+        document.getElementById("logPreview").textContent = (j.lines || []).slice(-40).join("\n");
+      } catch { /* empty */ }
+    }
+
+    document.getElementById("btnSend").onclick = async () => {
+      const tiers = [...document.querySelectorAll("#tierGrid input[type=checkbox]:checked")].map(
+        (c) => parseInt(c.value, 10)
+      );
+      if (!tiers.length) {
+        alert("Select at least one tier.");
+        return;
+      }
+      const useBuiltIn = document.getElementById("useBuiltIn").checked;
+      const schoolsCsv = document.getElementById("schoolsCsv").value;
+      if (!useBuiltIn && !schoolsCsv.trim()) {
+        alert("Paste schools or enable the built-in list.");
+        return;
+      }
+
+      const summary =
+        (useBuiltIn ? "<strong>Built-in 70 schools</strong>" : "<strong>Custom list</strong>") +
+        " · tiers <strong>" +
+        tiers.map((t) => "T" + t).join(", ") +
+        "</strong>";
+      addMsg("user", "<p>Run scrape: " + summary + "</p>");
+
+      const body = {
+        useBuiltInList: useBuiltIn,
+        schoolsCsv,
+        tiers,
+        apiKey: document.getElementById("apiKey").value.trim() || undefined,
+        out: document.getElementById("outPath").value.trim() || "output/gemini_contacts.json",
+        max: document.getElementById("maxSchools").value || undefined,
+        start: document.getElementById("startIdx").value || 0,
+        pagesPerSchool: document.getElementById("pagesPerSchool").value,
+        delayMs: document.getElementById("delayMs").value,
+      };
+
+      const res = await fetch("/api/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        addMsg("bot", "<p>" + (j.error || res.statusText) + "</p>");
+        return;
+      }
+      addMsg("bot", "<p>Job started. Watch the log below. Results append to your output JSON.</p>");
+      refreshStatus();
+    };
+
+    document.getElementById("btnStop").onclick = async () => {
+      await fetch("/api/stop", { method: "POST" });
+      refreshStatus();
+    };
+
+    document.getElementById("useBuiltIn").onchange = () => {
+      document.getElementById("schoolsCsv").disabled = document.getElementById("useBuiltIn").checked;
+    };
+    document.getElementById("schoolsCsv").disabled = false;
+
+    refreshStatus();
+    refreshLogs();
+    setInterval(() => {
+      refreshStatus();
+      refreshLogs();
+    }, 1500);
+  </script>
+</body>
+</html>

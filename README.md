@@ -1,95 +1,86 @@
 # Biryani Blitz — University Outreach
 
-Managed **Anthropic** agent (manager → parallel web-search workers → aggregator) plus a static **glassmorphic dashboard** for browsing and exporting contacts.
+**Anthropic** batch agent (`agent.js`) plus a **web app**: glassmorphic **chat UI** (`public/index.html`) to pick schools (CSV or built-in list), tick **T1–T9** tiers, and run **Playwright + Gemini**; plus a **contacts viewer** (`public/contacts.html`) for JSON/CSV.
 
-**GitHub:** [github.com/nealtheseal108/biryani-blitz-outreach](https://github.com/nealtheseal108/biryani-blitz-outreach)
+**Repo:** [github.com/nealtheseal108/biryani-blitz-outreach](https://github.com/nealtheseal108/biryani-blitz-outreach)
 
-## Nine outreach tiers (priority order)
+**Typography:** the UI asks for **Helvetica Neue / Helvetica Neue Pro** via CSS system fonts (common on macOS). There is no bundled “Pro” webfont (licensing); other platforms fall back to Helvetica / system sans-serif.
+
+## Web app (local)
+
+```bash
+cd biryani-blitz-outreach
+npm install
+npx playwright install chromium
+
+export GOOGLE_API_KEY="your-google-ai-studio-key"
+
+npm start
+# → http://127.0.0.1:3847  (chat)   ·   http://127.0.0.1:3847/contacts.html  (viewer)
+```
+
+In the chat: paste **CSV or one school per line**, check **tiers**, optional **built-in 70-school list**, then **Send & run**. Set **`GOOGLE_API_KEY`** on [Render](https://render.com) for production (below).
+
+## Nine outreach tiers
 
 | Tier | Track |
 | --- | --- |
-| **T1** | Student Union / Commercial Activities (vendor & contract gatekeepers) |
+| **T1** | Student Union / Commercial |
 | **T2** | Student Life / Student Experience |
-| **T3** | Student Government / board advocates |
-| **T4** | Entrepreneurship / student ventures |
-| **T5** | Cultural centers — South Asian & multicultural affairs |
-| **T6** | Sustainability / green events / vendor lists |
-| **T7** | Food truck / mobile vendor coordinator (unions) |
-| **T8** | Campus dining / auxiliary services |
-| **T9** | EHS / food safety / temp food permits |
+| **T3** | Student Government |
+| **T4** | Entrepreneurship |
+| **T5** | Cultural / South Asian & multicultural |
+| **T6** | Sustainability / vendor lists |
+| **T7** | Food truck / mobile vendor |
+| **T8** | Campus dining |
+| **T9** | EHS / food safety |
 
-The manager emits **exactly nine** search strings per school (T1–T9). Workers run **in parallel** per university (staggered slightly to reduce rate limits). Results are deduped by **email**, sorted by **tier** (ascending) then **confidence**.
+The Playwright pipeline runs **one web search per selected tier** per school, then opens up to **`--pages-per-school`** `.edu` pages and calls Gemini.
 
-## Prerequisites
-
-- **Node.js 18+** (uses native `fetch`)
-- Anthropic API key with access to **Claude** and the **web search** tool
-
-## Run the agent
+## CLI (Playwright + Gemini)
 
 ```bash
-cd biryani-blitz-outreach
+export GOOGLE_API_KEY="…"
+npm run scrape:batch -- --max 3 --tiers 1,4,8
+```
+
+Outputs JSON under **`output/`** (default `output/gemini_contacts.json`). Open **`/contacts.html`** in the app and drag the file in.
+
+## Anthropic agent (`agent.js`)
+
+```bash
 export ANTHROPIC_API_KEY=sk-ant-...
-
-# Smoke test: first 3 schools (~9 worker calls each → ~27 searches)
 node agent.js --test
-
-# First N schools only
-node agent.js --max 10
-
-# Full list (~70 universities)
-node agent.js
 ```
 
-Outputs are written to `./output/`:
+Outputs: `output/biryani_blitz_contacts.json`, `.csv`, checkpoints.
 
-- `biryani_blitz_contacts.csv` / `biryani_blitz_contacts.json` — final list  
-- `contacts_checkpoint.csv` — updated after each batch  
-- `run_log.json` — per-university status  
+## Deploy on Render (Docker Web Service)
 
-### CSV columns
+This app needs **Node + Playwright** (not a static site). Use **Docker** + `render.yaml`.
 
-`university`, `tier`, `tier_label`, `name`, `title`, `department`, `email`, `phone`, `confidence`, `source_url`
+1. Push this repo to GitHub (commands below).
+2. [Render](https://render.com) → **New** → **Web Service** → connect **nealtheseal108/biryani-blitz-outreach**.
+3. Render should detect **`render.yaml`** and **`Dockerfile`**.
+4. Add environment variable **`GOOGLE_API_KEY`** (your Google AI Studio key).
+5. Deploy. Open the service URL — **`/`** is the chat, **`/contacts.html`** is the viewer.
 
-## Dashboard (local or Render)
+Health check: **`GET /health`** → `ok`.
 
-- Open **`index.html`** in a browser (double-click or any static server).
-- Or drag-and-drop `biryani_blitz_contacts.json` / `.csv` from `./output/`.
-
-`dashboard.html` redirects to `index.html` for older bookmarks.
-
-### Deploy on Render (Static Site)
-
-1. Push this repo to GitHub (see below).
-2. In [Render](https://render.com): **New** → **Static Site** → connect `nealtheseal108/biryani-blitz-outreach`.
-3. **Build command:** leave empty  
-4. **Publish directory:** `.` (repository root)
-
-Render serves `index.html` at `/` automatically. If a deploy showed a blank site before, it was likely because only `dashboard.html` existed or the published root was wrong — the app entry point is now **`index.html`** at the repo root.
-
-## Connect and push to GitHub
-
-If the remote is empty or you are cloning fresh:
+## Push to GitHub
 
 ```bash
 cd biryani-blitz-outreach
-git init
 git add .
-git commit -m "Add 9-tier outreach agent, index dashboard, Render static config"
-git branch -M main
+git status
+git commit -m "Add chat web app, tier filters, Docker deploy"
 git remote add origin https://github.com/nealtheseal108/biryani-blitz-outreach.git
-git push -u origin main
-```
-
-If `origin` already exists:
-
-```bash
-git remote set-url origin https://github.com/nealtheseal108/biryani-blitz-outreach.git
+# if remote exists: git remote set-url origin https://github.com/nealtheseal108/biryani-blitz-outreach.git
 git push -u origin main
 ```
 
 ## Notes
 
-- The API client sends `x-api-key` and `anthropic-version` headers (required by Anthropic).
-- Web search finds **public** emails; treat `low` confidence rows as “verify before send.”
-- Full runs are long and billed per message; use `--test` / `--max` first.
+- Respect **robots / terms** of search engines and target sites; add delays if throttled.
+- Gemini finds **public** emails; verify low-confidence rows before outreach.
+- Anthropic client uses **`x-api-key`** and **`anthropic-version`** headers.

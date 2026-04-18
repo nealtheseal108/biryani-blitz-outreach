@@ -1,0 +1,352 @@
+[
+  {
+    "name": "New York University (NYU)",
+    "city": "New York, NY",
+    "entrepreneurship": "Entrepreneurial Institute / W.R. Berkley Innovation Labs"
+  },
+  {
+    "name": "Northeastern University",
+    "city": "Boston, MA",
+    "entrepreneurship": "New Ventures"
+  },
+  {
+    "name": "Columbia University",
+    "city": "New York, NY",
+    "entrepreneurship": "Columbia Entrepreneurship"
+  },
+  {
+    "name": "Arizona State University (ASU)",
+    "city": "Tempe, AZ",
+    "entrepreneurship": "Edson Entrepreneurship + Innovation"
+  },
+  {
+    "name": "University of Southern California (USC)",
+    "city": "Los Angeles, CA",
+    "entrepreneurship": "Marshall Greif Center / Blackstone LaunchPad"
+  },
+  {
+    "name": "University of Illinois Urbana-Champaign (UIUC)",
+    "city": "Champaign, IL",
+    "entrepreneurship": "Research Park / Siebel Center for Design"
+  },
+  {
+    "name": "University of North Texas (UNT)",
+    "city": "Denton, TX",
+    "entrepreneurship": "Innovation Center"
+  },
+  {
+    "name": "Purdue University",
+    "city": "West Lafayette, IN",
+    "entrepreneurship": "Burton D. Morgan Center for Entrepreneurship"
+  },
+  {
+    "name": "Boston University (BU)",
+    "city": "Boston, MA",
+    "entrepreneurship": "BUild Lab IDG Capital Student Innovation Center"
+  },
+  {
+    "name": "UC Berkeley (UCB)",
+    "city": "Berkeley, CA",
+    "entrepreneurship": "SCET / Berkeley SkyDeck"
+  },
+  {
+    "name": "University of Michigan - Ann Arbor",
+    "city": "Ann Arbor, MI",
+    "entrepreneurship": "Zell Lurie Institute"
+  },
+  {
+    "name": "University of Washington (UW)",
+    "city": "Seattle, WA",
+    "entrepreneurship": "Buerk Center for Entrepreneurship"
+  },
+  {
+    "name": "Johns Hopkins University (JHU)",
+    "city": "Baltimore, MD",
+    "entrepreneurship": "FastForward U"
+  },
+  {
+    "name": "UCLA",
+    "city": "Los Angeles, CA",
+    "entrepreneurship": "Startup UCLA"
+  },
+  {
+    "name": "UC San Diego (UCSD)",
+    "city": "La Jolla, CA",
+    "entrepreneurship": "The Basement"
+  },
+  {
+    "name": "Carnegie Mellon University (CMU)",
+    "city": "Pittsburgh, PA",
+    "entrepreneurship": "Swartz Center for Entrepreneurship"
+  },
+  {
+    "name": "Georgia Tech",
+    "city": "Atlanta, GA",
+    "entrepreneurship": "CREATE-X"
+  },
+  {
+    "name": "University of Texas at Austin (UT Austin)",
+    "city": "Austin, TX",
+    "entrepreneurship": "Blackstone LaunchPad"
+  },
+  {
+    "name": "Texas A&M University",
+    "city": "College Station, TX",
+    "entrepreneurship": "McFerrin Center for Entrepreneurship"
+  },
+  {
+    "name": "Cornell University",
+    "city": "Ithaca, NY",
+    "entrepreneurship": "Entrepreneurship at Cornell"
+  },
+  {
+    "name": "University of Maryland - College Park",
+    "city": "College Park, MD",
+    "entrepreneurship": "Academy for Innovation & Entrepreneurship"
+  },
+  {
+    "name": "Rutgers University - New Brunswick",
+    "city": "New Brunswick, NJ",
+    "entrepreneurship": "Rutgers Entrepreneurship"
+  },
+  {
+    "name": "University of Pennsylvania (UPenn)",
+    "city": "Philadelphia, PA",
+    "entrepreneurship": "Venture Lab"
+  },
+  {
+    "name": "University of Texas at Dallas (UTD)",
+    "city": "Richardson, TX",
+    "entrepreneurship": "Institute for Innovation and Entrepreneurship"
+  },
+  {
+    "name": "San Jose State University (SJSU)",
+    "city": "San Jose, CA",
+    "entrepreneurship": "Spartan East Side Promise"
+  },
+  {
+    "name": "University of Florida (UF)",
+    "city": "Gainesville, FL",
+    "entrepreneurship": "Entrepreneurship & Innovation Center"
+  },
+  {
+    "name": "Ohio State University (OSU)",
+    "city": "Columbus, OH",
+    "entrepreneurship": "Keenan Center for Entrepreneurship"
+  },
+  {
+    "name": "University of Central Florida (UCF)",
+    "city": "Orlando, FL",
+    "entrepreneurship": "Blackstone LaunchPad"
+  },
+  {
+    "name": "University of Minnesota - Twin Cities",
+    "city": "Minneapolis, MN",
+    "entrepreneurship": "Gary S. Holmes Center"
+  },
+  {
+    "name": "University of Wisconsin - Madison",
+    "city": "Madison, WI",
+    "entrepreneurship": "Discovery to Product (D2P)"
+  },
+  {
+    "name": "Michigan State University (MSU)",
+    "city": "East Lansing, MI",
+    "entrepreneurship": "Burgess Institute"
+  },
+  {
+    "name": "Penn State University",
+    "city": "University Park, PA",
+    "entrepreneurship": "Invent Penn State"
+  },
+  {
+    "name": "University of South Florida (USF)",
+    "city": "Tampa, FL",
+    "entrepreneurship": "Center for Entrepreneurship"
+  },
+  {
+    "name": "University of Houston",
+    "city": "Houston, TX",
+    "entrepreneurship": "Wolff Center for Entrepreneurship"
+  },
+  {
+    "name": "UC Irvine (UCI)",
+    "city": "Irvine, CA",
+    "entrepreneurship": "ANTrepreneur Center"
+  },
+  {
+    "name": "UC Davis (UCD)",
+    "city": "Davis, CA",
+    "entrepreneurship": "Institute for Innovation and Entrepreneurship"
+  },
+  {
+    "name": "NC State University",
+    "city": "Raleigh, NC",
+    "entrepreneurship": "NC State Entrepreneurship"
+  },
+  {
+    "name": "Virginia Tech",
+    "city": "Blacksburg, VA",
+    "entrepreneurship": "Apex Center for Entrepreneurs"
+  },
+  {
+    "name": "University of Arizona",
+    "city": "Tucson, AZ",
+    "entrepreneurship": "McGuire Center for Entrepreneurship"
+  },
+  {
+    "name": "University of Utah",
+    "city": "Salt Lake City, UT",
+    "entrepreneurship": "Lassonde Entrepreneur Institute"
+  },
+  {
+    "name": "Pace University",
+    "city": "New York, NY",
+    "entrepreneurship": "Lubin School of Business"
+  },
+  {
+    "name": "Indiana University - Bloomington",
+    "city": "Bloomington, IN",
+    "entrepreneurship": "Shoemaker Innovation Center"
+  },
+  {
+    "name": "UNC Chapel Hill",
+    "city": "Chapel Hill, NC",
+    "entrepreneurship": "Innovate Carolina"
+  },
+  {
+    "name": "University of Virginia (UVA)",
+    "city": "Charlottesville, VA",
+    "entrepreneurship": "Batten Institute"
+  },
+  {
+    "name": "Duke University",
+    "city": "Durham, NC",
+    "entrepreneurship": "Duke Innovation & Entrepreneurship"
+  },
+  {
+    "name": "Stanford University",
+    "city": "Stanford, CA",
+    "entrepreneurship": "STVP - Stanford Technology Ventures Program"
+  },
+  {
+    "name": "MIT",
+    "city": "Cambridge, MA",
+    "entrepreneurship": "Martin Trust Center for MIT Entrepreneurship"
+  },
+  {
+    "name": "Harvard University",
+    "city": "Cambridge, MA",
+    "entrepreneurship": "Harvard Innovation Labs (i-lab)"
+  },
+  {
+    "name": "Yale University",
+    "city": "New Haven, CT",
+    "entrepreneurship": "Tsai Center for Innovative Thinking"
+  },
+  {
+    "name": "Princeton University",
+    "city": "Princeton, NJ",
+    "entrepreneurship": "Keller Center"
+  },
+  {
+    "name": "University of Chicago",
+    "city": "Chicago, IL",
+    "entrepreneurship": "Polsky Center"
+  },
+  {
+    "name": "Northwestern University",
+    "city": "Evanston, IL",
+    "entrepreneurship": "The Garage"
+  },
+  {
+    "name": "Rice University",
+    "city": "Houston, TX",
+    "entrepreneurship": "Rice Alliance for Technology and Entrepreneurship"
+  },
+  {
+    "name": "Washington University in St. Louis",
+    "city": "St. Louis, MO",
+    "entrepreneurship": "Skandalaris Center"
+  },
+  {
+    "name": "Syracuse University",
+    "city": "Syracuse, NY",
+    "entrepreneurship": "Blackstone LaunchPad"
+  },
+  {
+    "name": "George Washington University (GWU)",
+    "city": "Washington, DC",
+    "entrepreneurship": "Office of Innovation & Entrepreneurship"
+  },
+  {
+    "name": "Georgetown University",
+    "city": "Washington, DC",
+    "entrepreneurship": "Georgetown Entrepreneurship"
+  },
+  {
+    "name": "Boston College",
+    "city": "Chestnut Hill, MA",
+    "entrepreneurship": "Shea Center for Entrepreneurship"
+  },
+  {
+    "name": "Rochester Institute of Technology (RIT)",
+    "city": "Rochester, NY",
+    "entrepreneurship": "Simone Center for Innovation"
+  },
+  {
+    "name": "Emory University",
+    "city": "Atlanta, GA",
+    "entrepreneurship": "Center for Entrepreneurship & Innovation"
+  },
+  {
+    "name": "University of Notre Dame",
+    "city": "Notre Dame, IN",
+    "entrepreneurship": "IDEA Center"
+  },
+  {
+    "name": "Case Western Reserve University",
+    "city": "Cleveland, OH",
+    "entrepreneurship": "Sears think[box]"
+  },
+  {
+    "name": "Stevens Institute of Technology",
+    "city": "Hoboken, NJ",
+    "entrepreneurship": "Stevens Venture Center"
+  },
+  {
+    "name": "Illinois Institute of Technology",
+    "city": "Chicago, IL",
+    "entrepreneurship": "Kaplan Institute"
+  },
+  {
+    "name": "University of Colorado Boulder",
+    "city": "Boulder, CO",
+    "entrepreneurship": "Innovation & Entrepreneurship"
+  },
+  {
+    "name": "University of Georgia (UGA)",
+    "city": "Athens, GA",
+    "entrepreneurship": "Entrepreneurship Program"
+  },
+  {
+    "name": "Clemson University",
+    "city": "Clemson, SC",
+    "entrepreneurship": "Watt Family Innovation Center"
+  },
+  {
+    "name": "University of Rochester",
+    "city": "Rochester, NY",
+    "entrepreneurship": "Ain Center for Entrepreneurship"
+  },
+  {
+    "name": "NJIT",
+    "city": "Newark, NJ",
+    "entrepreneurship": "Leir Institute for Entrepreneurship"
+  },
+  {
+    "name": "University of Oregon",
+    "city": "Eugene, OR",
+    "entrepreneurship": "Lundquist Center for Entrepreneurship"
+  }
+]

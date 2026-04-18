@@ -1,0 +1,19 @@
+{
+  "name": "biryani-blitz-outreach",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "scrape": "node playwright-gemini.mjs",
+    "scrape:batch": "node playwright-gemini.mjs --batch",
+    "gui": "node server.mjs"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "express": "^4.21.0",
+    "playwright": "^1.49.0"
+  }
+}

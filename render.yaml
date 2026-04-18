@@ -1,8 +1,13 @@
-# Render Static Site — set "Root Directory" blank; publish path is repo root (`.`).
-# https://render.com/docs/static-sites
+# Web service (Node + Playwright) — not a static site
+# Set GOOGLE_API_KEY in the Render dashboard (Environment).
 services:
   - type: web
     name: biryani-blitz-outreach
-    runtime: static
-    buildCommand: ""
-    staticPublishPath: .
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GOOGLE_API_KEY
+        sync: false
