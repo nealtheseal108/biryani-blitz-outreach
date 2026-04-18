@@ -4,7 +4,7 @@
 
 **Repo:** [github.com/nealtheseal108/biryani-blitz-outreach](https://github.com/nealtheseal108/biryani-blitz-outreach)
 
-**Typography:** the UI asks for **Helvetica Neue / Helvetica Neue Pro** via CSS system fonts (common on macOS). There is no bundled “Pro” webfont (licensing); other platforms fall back to Helvetica / system sans-serif.
+**Typography:** the UI prefers **Helvetica Neue Pro** via optional self-hosted **WOFF2** files in `public/fonts/` (see `public/fonts/README.txt`). Without those files, **system** Helvetica Neue / Helvetica is used.
 
 ## Web app (local)
 
@@ -19,7 +19,7 @@ npm start
 # → http://127.0.0.1:3847  (chat)   ·   http://127.0.0.1:3847/contacts.html  (viewer)
 ```
 
-In the chat: paste **CSV or one school per line**, check **tiers**, optional **built-in 70-school list**, then **Send & run**. Set **`GOOGLE_API_KEY`** on [Render](https://render.com) for production (below).
+In the chat: paste **CSV or one school per line**, check **tiers**, optional **built-in 70-school list**, then **Send & run**. Use **Outreach tracker** to check off contacted schools and set a **pipeline stage** per university (saved in **localStorage**, synced to **`data/outreach-state.json`** on the server). Export JSON as backup; cloud disks may reset on redeploy.
 
 ## Nine outreach tiers
 

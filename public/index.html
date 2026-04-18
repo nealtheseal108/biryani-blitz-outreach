@@ -4,8 +4,22 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Biryani Blitz — Outreach</title>
-  <!-- Helvetica Neue / Pro: uses installed fonts on macOS; no free webfont for "Pro" — fallbacks below -->
+  <!-- Optional licensed files: public/fonts/HelveticaNeuePro-*.woff2 (see public/fonts/README.txt) -->
   <style>
+    @font-face {
+      font-family: "Helvetica Neue Pro";
+      font-weight: 400;
+      font-style: normal;
+      src: url("/fonts/HelveticaNeuePro-Regular.woff2") format("woff2");
+      font-display: swap;
+    }
+    @font-face {
+      font-family: "Helvetica Neue Pro";
+      font-weight: 600;
+      font-style: normal;
+      src: url("/fonts/HelveticaNeuePro-Medium.woff2") format("woff2");
+      font-display: swap;
+    }
     :root {
       --bg: #080a0e;
       --glass: rgba(255,255,255,0.06);
@@ -19,7 +33,7 @@
       --bot-bubble: rgba(255,255,255,0.07);
       --radius: 18px;
       --radius-sm: 12px;
-      --font: "Helvetica Neue", "Helvetica Neue Pro", "HelveticaNeue-Medium", "HelveticaNeue", Helvetica, Arial, ui-sans-serif, system-ui, sans-serif;
+      --font: "Helvetica Neue Pro", "Helvetica Neue", "HelveticaNeue-Medium", "HelveticaNeue", Helvetica, Arial, ui-sans-serif, system-ui, sans-serif;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
@@ -273,6 +287,149 @@
       background: rgba(0,0,0,0.35);
       border: 1px solid rgba(255,255,255,0.06);
     }
+
+    header nav { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; justify-content: flex-end; }
+    button.nav-btn {
+      font-family: var(--font);
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text);
+      text-decoration: none;
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+      border: 1px solid rgba(255,124,56,0.35);
+      background: rgba(255,124,56,0.12);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      cursor: pointer;
+    }
+    button.nav-btn:hover { border-color: rgba(255,124,56,0.55); background: rgba(255,124,56,0.2); }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      background: rgba(4,6,10,0.65);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      opacity: 1;
+      transition: opacity 0.2s ease;
+    }
+    .modal-backdrop.hidden { display: none; }
+    .modal-glass {
+      width: 100%;
+      max-width: 640px;
+      max-height: min(88vh, 720px);
+      display: flex;
+      flex-direction: column;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: rgba(18,20,28,0.72);
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
+      box-shadow: 0 24px 80px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06);
+    }
+    .modal-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 1rem 1.15rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .modal-header h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    .modal-header h2 span {
+      display: block;
+      font-size: 0.58rem;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.2rem;
+    }
+    .modal-lead {
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.45;
+      padding: 0.75rem 1.15rem 0;
+    }
+    .modal-body-scroll {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      padding: 0 1.15rem 0.75rem;
+      min-height: 0;
+    }
+    .modal-body-scroll input[type="search"] {
+      margin-bottom: 0.5rem;
+    }
+    .tracker-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.45rem;
+      margin-bottom: 0.5rem;
+    }
+    .tracker-toolbar .status { margin: 0; flex: 1; min-width: 120px; font-size: 0.7rem; }
+    .tracker-list {
+      flex: 1;
+      overflow-y: auto;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(0,0,0,0.28);
+    }
+    .tracker-row {
+      display: grid;
+      grid-template-columns: 28px 1fr minmax(140px, 1fr);
+      gap: 0.5rem;
+      align-items: center;
+      padding: 0.5rem 0.65rem;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      font-size: 0.78rem;
+    }
+    .tracker-row:last-child { border-bottom: none; }
+    .tracker-row:hover { background: rgba(255,255,255,0.03); }
+    .tracker-row input[type="checkbox"] { accent-color: var(--accent); width: 1rem; height: 1rem; justify-self: center; }
+    .tracker-name { color: var(--text); line-height: 1.3; }
+    .tracker-name small { display: block; font-size: 0.65rem; color: var(--muted); margin-top: 0.15rem; }
+    .tracker-row select {
+      font-family: var(--font);
+      font-size: 0.72rem;
+      padding: 0.4rem 0.45rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: rgba(0,0,0,0.45);
+      color: var(--text);
+      width: 100%;
+      cursor: pointer;
+    }
+    .tracker-row select:focus {
+      outline: none;
+      border-color: rgba(255,124,56,0.45);
+    }
+    .tracker-footer {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      padding: 0.75rem 1.15rem 1rem;
+      border-top: 1px solid var(--border);
+    }
+    @media (max-width: 520px) {
+      .tracker-row {
+        grid-template-columns: 24px 1fr;
+        grid-template-rows: auto auto;
+      }
+      .tracker-row select { grid-column: 2 / -1; }
+    }
   </style>
 </head>
 <body>
@@ -280,6 +437,7 @@
     <header>
       <h1><span>Biryani Blitz</span>Outreach assistant</h1>
       <nav>
+        <button type="button" class="nav-btn" id="btnOpenTracker">Outreach tracker</button>
         <a href="/contacts.html">Contacts viewer</a>
       </nav>
     </header>
@@ -341,6 +499,34 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
           </div>
           <div class="log-preview" id="logPreview"></div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="trackerModal" class="modal-backdrop hidden" aria-hidden="true">
+    <div class="modal-glass" role="dialog" aria-modal="true" aria-labelledby="trackerTitle">
+      <div class="modal-header">
+        <h2 id="trackerTitle"><span>Biryani Blitz</span>Outreach tracker</h2>
+        <button type="button" class="ghost" id="btnCloseTracker">Close</button>
+      </div>
+      <p class="modal-lead">
+        Check off universities you’ve already contacted. The <strong>dropdown</strong> is your pipeline stage (saved in the browser and synced to the server when available).
+      </p>
+      <div class="modal-body-scroll">
+        <input type="search" id="trackerSearch" placeholder="Filter universities…" autocomplete="off" />
+        <div class="tracker-toolbar">
+          <button type="button" class="ghost" id="btnCheckShown">Check all shown</button>
+          <button type="button" class="ghost" id="btnUncheckShown">Uncheck all shown</button>
+          <span class="status" id="trackerStats"></span>
+        </div>
+        <div class="tracker-list" id="trackerList"></div>
+      </div>
+      <div class="tracker-footer">
+        <button type="button" class="ghost" id="btnExportTracker">Export JSON</button>
+        <label class="ghost" style="cursor:pointer;display:inline-block;">
+          Import JSON
+          <input type="file" id="trackerImportFile" accept="application/json,.json" hidden />
+        </label>
       </div>
     </div>
   </div>
@@ -462,6 +648,208 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
       document.getElementById("schoolsCsv").disabled = document.getElementById("useBuiltIn").checked;
     };
     document.getElementById("schoolsCsv").disabled = false;
+
+    // —— Outreach tracker (glass modal): contacted + stage dropdown ——
+    const LS_KEY = "bb_outreach_tracker_v1";
+    const STAGES = [
+      { value: "none", label: "Not started" },
+      { value: "queued", label: "Queued to email" },
+      { value: "emailed", label: "Emailed" },
+      { value: "follow_up", label: "Follow-up sent" },
+      { value: "replied", label: "They replied" },
+      { value: "meeting", label: "Meeting / call set" },
+      { value: "pilot", label: "Pilot / trial" },
+      { value: "closed_won", label: "Closed — yes" },
+      { value: "closed_no", label: "Closed — no" },
+      { value: "paused", label: "Paused" },
+    ];
+
+    let uniList = [];
+    let trackerState = {};
+    let trackerSaveTimer = null;
+
+    function getTrackerEntry(name) {
+      const cur = trackerState[name];
+      if (cur && typeof cur === "object") {
+        return {
+          contacted: !!cur.contacted,
+          stage: typeof cur.stage === "string" ? cur.stage : "none",
+        };
+      }
+      return { contacted: false, stage: "none" };
+    }
+
+    function setTrackerEntry(name, patch) {
+      const prev = getTrackerEntry(name);
+      trackerState[name] = { ...prev, ...patch };
+      persistTracker();
+    }
+
+    function persistTracker() {
+      try {
+        localStorage.setItem(LS_KEY, JSON.stringify(trackerState));
+      } catch {
+        /* empty */
+      }
+      clearTimeout(trackerSaveTimer);
+      trackerSaveTimer = setTimeout(async () => {
+        try {
+          await fetch("/api/outreach-state", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(trackerState),
+          });
+        } catch {
+          /* server optional */
+        }
+      }, 450);
+    }
+
+    async function loadTrackerBootstrap() {
+      let local = {};
+      try {
+        local = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
+      } catch {
+        local = {};
+      }
+      let server = {};
+      try {
+        const r = await fetch("/api/outreach-state");
+        if (r.ok) server = await r.json();
+      } catch {
+        /* empty */
+      }
+      trackerState = { ...server, ...local };
+      try {
+        localStorage.setItem(LS_KEY, JSON.stringify(trackerState));
+      } catch {
+        /* empty */
+      }
+    }
+
+    async function ensureUniversities() {
+      if (uniList.length) return;
+      const r = await fetch("/api/universities");
+      if (!r.ok) throw new Error("Could not load universities list");
+      uniList = await r.json();
+    }
+
+    function trackerFilterList() {
+      const q = (document.getElementById("trackerSearch").value || "").toLowerCase().trim();
+      return uniList.filter((u) => {
+        const name = (u.name || "").toLowerCase();
+        const city = (u.city || "").toLowerCase();
+        return !q || name.includes(q) || city.includes(q);
+      });
+    }
+
+    function renderTrackerTable() {
+      const listEl = document.getElementById("trackerList");
+      const filtered = trackerFilterList();
+      const contactedCount = filtered.filter((u) => getTrackerEntry(u.name).contacted).length;
+      document.getElementById("trackerStats").textContent =
+        filtered.length + " shown · " + contactedCount + " marked contacted";
+
+      listEl.innerHTML = filtered
+        .map((u) => {
+          const e = getTrackerEntry(u.name);
+          const sel = STAGES.map((s) => {
+            const selAttr = s.value === e.stage ? " selected" : "";
+            return `<option value="${s.value}"${selAttr}>${s.label.replace(/</g, "&lt;")}</option>`;
+          }).join("");
+          const city = u.city ? `<small>${u.city.replace(/</g, "&lt;")}</small>` : "";
+          return (
+            `<div class="tracker-row" data-uni="${encodeURIComponent(u.name)}">` +
+            `<input type="checkbox" class="tr-contacted" ${e.contacted ? "checked" : ""} aria-label="Contacted ${u.name.replace(/"/g, "&quot;")}" />` +
+            `<div class="tracker-name">${u.name.replace(/</g, "&lt;")}${city}</div>` +
+            `<select class="tr-stage" aria-label="Stage for ${u.name.replace(/"/g, "&quot;")}">${sel}</select>` +
+            `</div>`
+          );
+        })
+        .join("");
+
+      listEl.querySelectorAll(".tr-contacted").forEach((cb) => {
+        cb.addEventListener("change", (ev) => {
+          const row = ev.target.closest(".tracker-row");
+          const name = decodeURIComponent(row.getAttribute("data-uni"));
+          setTrackerEntry(name, { contacted: ev.target.checked });
+        });
+      });
+      listEl.querySelectorAll(".tr-stage").forEach((sel) => {
+        sel.addEventListener("change", (ev) => {
+          const row = ev.target.closest(".tracker-row");
+          const name = decodeURIComponent(row.getAttribute("data-uni"));
+          setTrackerEntry(name, { stage: ev.target.value });
+        });
+      });
+    }
+
+    const trackerModal = document.getElementById("trackerModal");
+
+    async function openTrackerModal() {
+      try {
+        await ensureUniversities();
+        await loadTrackerBootstrap();
+        document.getElementById("trackerSearch").value = "";
+        renderTrackerTable();
+        trackerModal.classList.remove("hidden");
+        trackerModal.setAttribute("aria-hidden", "false");
+      } catch (err) {
+        alert(err.message || String(err));
+      }
+    }
+
+    function closeTrackerModal() {
+      trackerModal.classList.add("hidden");
+      trackerModal.setAttribute("aria-hidden", "true");
+    }
+
+    document.getElementById("btnOpenTracker").addEventListener("click", openTrackerModal);
+    document.getElementById("btnCloseTracker").addEventListener("click", closeTrackerModal);
+    trackerModal.addEventListener("click", (e) => {
+      if (e.target === trackerModal) closeTrackerModal();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !trackerModal.classList.contains("hidden")) closeTrackerModal();
+    });
+
+    document.getElementById("trackerSearch").addEventListener("input", renderTrackerTable);
+    document.getElementById("btnCheckShown").addEventListener("click", () => {
+      trackerFilterList().forEach((u) => setTrackerEntry(u.name, { contacted: true }));
+      renderTrackerTable();
+    });
+    document.getElementById("btnUncheckShown").addEventListener("click", () => {
+      trackerFilterList().forEach((u) => setTrackerEntry(u.name, { contacted: false }));
+      renderTrackerTable();
+    });
+
+    document.getElementById("btnExportTracker").addEventListener("click", () => {
+      const blob = new Blob([JSON.stringify(trackerState, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "outreach-tracker-state.json";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
+    document.getElementById("trackerImportFile").addEventListener("change", (ev) => {
+      const file = ev.target.files && ev.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(reader.result);
+          if (typeof data !== "object" || data === null) throw new Error("Invalid JSON");
+          trackerState = { ...trackerState, ...data };
+          persistTracker();
+          renderTrackerTable();
+        } catch (e2) {
+          alert("Import failed: " + (e2.message || e2));
+        }
+        ev.target.value = "";
+      };
+      reader.readAsText(file);
+    });
 
     refreshStatus();
     refreshLogs();
