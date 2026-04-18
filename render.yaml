@@ -1,0 +1,8 @@
+# Render Static Site — set "Root Directory" blank; publish path is repo root (`.`).
+# https://render.com/docs/static-sites
+services:
+  - type: web
+    name: biryani-blitz-outreach
+    runtime: static
+    buildCommand: ""
+    staticPublishPath: .

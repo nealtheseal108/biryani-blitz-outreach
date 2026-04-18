@@ -1,82 +1,95 @@
-# Biryani Blitz University Outreach Agent
+# Biryani Blitz — University Outreach
 
-A managed 3-step AI agent that scours the web for university contact emails across
-3 target departments: **Student Union**, **Campus Dining**, and **Entrepreneurship**.
+Managed **Anthropic** agent (manager → parallel web-search workers → aggregator) plus a static **glassmorphic dashboard** for browsing and exporting contacts.
 
-## Contact Archetypes (modeled on UC Berkeley)
+**GitHub:** [github.com/nealtheseal108/biryani-blitz-outreach](https://github.com/nealtheseal108/biryani-blitz-outreach)
 
-From your Berkeley email history, the agent searches for exact analogues of:
+## Nine outreach tiers (priority order)
 
-| Role | Name (Berkeley) | Email | Why They Matter |
-|---|---|---|---|
-| Director, Business Dev & Commercial Activities | Ryan Adelman-Sessler | ryansessler@berkeley.edu | Main gatekeeper for vendor placement |
-| Director, Student Union Facilities & Operations | Jaime Santoyo | jsantoyo@berkeley.edu | Facilities/installation approvals |
-| Associate Director, Facilities Operations | Andy Hang | andyhang@berkeley.edu | Day-to-day ops coordination |
-| Director, Programs & Marketing | Ariel Feinberg-Berson | aberson@berkeley.edu | Digital signage & marketing |
-| Cafe Manager, Campus Dining | Huw Thornton | huwthornton@berkeley.edu | Food service partnerships |
-| Wellness Dietitian | Kim Guess | kguess@berkeley.edu | Food policy compliance |
+| Tier | Track |
+| --- | --- |
+| **T1** | Student Union / Commercial Activities (vendor & contract gatekeepers) |
+| **T2** | Student Life / Student Experience |
+| **T3** | Student Government / board advocates |
+| **T4** | Entrepreneurship / student ventures |
+| **T5** | Cultural centers — South Asian & multicultural affairs |
+| **T6** | Sustainability / green events / vendor lists |
+| **T7** | Food truck / mobile vendor coordinator (unions) |
+| **T8** | Campus dining / auxiliary services |
+| **T9** | EHS / food safety / temp food permits |
 
-## Setup
+The manager emits **exactly nine** search strings per school (T1–T9). Workers run **in parallel** per university (staggered slightly to reduce rate limits). Results are deduped by **email**, sorted by **tier** (ascending) then **confidence**.
+
+## Prerequisites
+
+- **Node.js 18+** (uses native `fetch`)
+- Anthropic API key with access to **Claude** and the **web search** tool
+
+## Run the agent
 
 ```bash
-# 1. Set your API key (no SDK needed — uses raw fetch)
+cd biryani-blitz-outreach
 export ANTHROPIC_API_KEY=sk-ant-...
 
-# 2. Run a test on 3 universities first
+# Smoke test: first 3 schools (~9 worker calls each → ~27 searches)
 node agent.js --test
 
-# 3. Run on first 20 universities
-node agent.js --max 20
+# First N schools only
+node agent.js --max 10
 
-# 4. Run the full 70-university sweep
+# Full list (~70 universities)
 node agent.js
 ```
 
-## Output
+Outputs are written to `./output/`:
 
-All files are saved to `./output/`:
+- `biryani_blitz_contacts.csv` / `biryani_blitz_contacts.json` — final list  
+- `contacts_checkpoint.csv` — updated after each batch  
+- `run_log.json` — per-university status  
 
-- `biryani_blitz_contacts.csv` — final deduped contacts ready for outreach
-- `biryani_blitz_contacts.json` — same data in JSON
-- `contacts_checkpoint.csv` — live-updated after each batch (so progress is never lost)
-- `run_log.json` — per-university success/error log
+### CSV columns
 
-## CSV columns
+`university`, `tier`, `tier_label`, `name`, `title`, `department`, `email`, `phone`, `confidence`, `source_url`
 
-| Column | Description |
-|---|---|
-| university | University name |
-| name | Full name |
-| title | Exact job title |
-| department | Student Union / Dining / Entrepreneurship / Student Life |
-| email | Email address |
-| phone | Phone if found |
-| confidence | high / medium / low |
-| source_url | URL where contact was found |
+## Dashboard (local or Render)
 
-## Architecture
+- Open **`index.html`** in a browser (double-click or any static server).
+- Or drag-and-drop `biryani_blitz_contacts.json` / `.csv` from `./output/`.
 
+`dashboard.html` redirects to `index.html` for older bookmarks.
+
+### Deploy on Render (Static Site)
+
+1. Push this repo to GitHub (see below).
+2. In [Render](https://render.com): **New** → **Static Site** → connect `nealtheseal108/biryani-blitz-outreach`.
+3. **Build command:** leave empty  
+4. **Publish directory:** `.` (repository root)
+
+Render serves `index.html` at `/` automatically. If a deploy showed a blank site before, it was likely because only `dashboard.html` existed or the published root was wrong — the app entry point is now **`index.html`** at the repo root.
+
+## Connect and push to GitHub
+
+If the remote is empty or you are cloning fresh:
+
+```bash
+cd biryani-blitz-outreach
+git init
+git add .
+git commit -m "Add 9-tier outreach agent, index dashboard, Render static config"
+git branch -M main
+git remote add origin https://github.com/nealtheseal108/biryani-blitz-outreach.git
+git push -u origin main
 ```
-For each university:
-  1. MANAGER call (no tools) → generates 4-5 targeted search queries
-  2. WORKER calls (web_search enabled) → one call per query, extracts contacts as JSON
-  3. Results accumulated across all universities
 
-After all universities:
-  4. AGGREGATOR → dedup by email, sort by confidence + department priority, export CSV
+If `origin` already exists:
+
+```bash
+git remote set-url origin https://github.com/nealtheseal108/biryani-blitz-outreach.git
+git push -u origin main
 ```
 
-- Universities processed in batches of 5 (parallel)
-- 3 second delay between batches to respect rate limits
-- Checkpoint saved after every batch so you can resume if the run breaks
+## Notes
 
-## Tips
-
-- Run `--test` first to verify your API key works and see sample output
-- The `confidence` column tells you how to prioritize:
-  - `high` = email found directly on a staff page
-  - `medium` = found in a directory listing
-  - `low` = email format inferred (e.g. first.last@university.edu guessed from name)
-- Low-confidence emails should be verified before cold outreach
-- Full run (~70 universities × 5 queries each = ~350 API calls) takes 20-40 minutes
-  and costs approximately $3-8 depending on search results length
+- The API client sends `x-api-key` and `anthropic-version` headers (required by Anthropic).
+- Web search finds **public** emails; treat `low` confidence rows as “verify before send.”
+- Full runs are long and billed per message; use `--test` / `--max` first.

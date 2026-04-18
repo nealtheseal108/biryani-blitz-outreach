@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Biryani Blitz — Outreach Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --glass-bg: rgba(255,255,255,0.07);
+    --glass-border: rgba(255,255,255,0.14);
+    --glass-hover: rgba(255,255,255,0.12);
+    --accent: #ff7c38;
+    --accent-soft: rgba(255,124,56,0.18);
+    --text-primary: rgba(255,255,255,0.92);
+    --text-secondary: rgba(255,255,255,0.52);
+    --text-muted: rgba(255,255,255,0.3);
+    --bg-1: #0d0f14;
+    --radius: 14px;
+    --radius-sm: 8px;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'DM Mono', monospace;
+    background: var(--bg-1);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 50% at 20% 10%, rgba(255,124,56,0.12) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 60% at 80% 80%, rgba(80,60,200,0.1) 0%, transparent 55%),
+      radial-gradient(ellipse 40% 40% at 60% 30%, rgba(255,200,80,0.06) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrapper { position: relative; z-index: 1; max-width: 1320px; margin: 0 auto; padding: 0 2rem 4rem; }
+
+  header {
+    padding: 3rem 0 2rem;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    border-bottom: 0.5px solid var(--glass-border);
+    margin-bottom: 2rem;
+  }
+
+  .brand { display: flex; align-items: center; gap: 14px; }
+
+  .logo-mark {
+    width: 42px; height: 42px;
+    border-radius: 10px;
+    background: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'DM Serif Display', serif;
+    font-size: 20px;
+    color: #fff;
+    flex-shrink: 0;
+  }
+
+  h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.6rem;
+    font-weight: 400;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+
+  h1 span {
+    display: block;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 300;
+    color: var(--accent);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+
+  .stats-bar {
+    display: flex;
+    gap: 1px;
+    margin-bottom: 2rem;
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 0.5px solid var(--glass-border);
+    flex-wrap: wrap;
+  }
+
+  .stat-cell {
+    flex: 1;
+    min-width: 100px;
+    padding: 1rem 1rem;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    text-align: center;
+  }
+
+  .stat-cell:not(:last-child) { border-right: 0.5px solid var(--glass-border); }
+
+  .stat-num {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.75rem;
+    font-weight: 400;
+    color: var(--accent);
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-size: 0.58rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-top: 4px;
+  }
+
+  .controls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+    align-items: center;
+  }
+
+  .search-wrap {
+    flex: 1;
+    min-width: 220px;
+    position: relative;
+  }
+
+  .search-wrap svg {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 14px; height: 14px;
+    opacity: 0.4;
+  }
+
+  input[type="search"], select {
+    width: 100%;
+    height: 38px;
+    background: var(--glass-bg);
+    border: 0.5px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.78rem;
+    outline: none;
+    padding: 0 12px;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    transition: border-color 0.2s;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+
+  input[type="search"] { padding-left: 36px; }
+
+  input[type="search"]:focus, select:focus {
+    border-color: var(--accent);
+    background: rgba(255,124,56,0.06);
+  }
+
+  input[type="search"]::placeholder { color: var(--text-muted); }
+
+  select option { background: #1a1d24; color: var(--text-primary); }
+
+  .filter-btn {
+    height: 38px;
+    padding: 0 16px;
+    border-radius: var(--radius-sm);
+    border: 0.5px solid var(--glass-border);
+    background: var(--glass-bg);
+    color: var(--text-secondary);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    transition: all 0.18s;
+    white-space: nowrap;
+  }
+
+  .filter-btn:hover { background: var(--glass-hover); color: var(--text-primary); border-color: rgba(255,255,255,0.22); }
+
+  .filter-btn.active {
+    background: var(--accent-soft);
+    border-color: rgba(255,124,56,0.45);
+    color: var(--accent);
+  }
+
+  .university-section {
+    margin-bottom: 1.5rem;
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 0.5px solid var(--glass-border);
+    animation: fadeUp 0.3s ease both;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .university-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0.9rem 1.25rem;
+    background: rgba(255,255,255,0.05);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.18s;
+  }
+
+  .university-header:hover { background: var(--glass-hover); }
+
+  .uni-rank {
+    font-size: 0.65rem;
+    color: var(--accent);
+    min-width: 28px;
+    letter-spacing: 0.05em;
+  }
+
+  .uni-name {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.05rem;
+    font-weight: 400;
+    flex: 1;
+  }
+
+  .uni-city { font-size: 0.68rem; color: var(--text-secondary); letter-spacing: 0.05em; }
+
+  .uni-count {
+    font-size: 0.65rem;
+    padding: 2px 8px;
+    border-radius: 20px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 0.5px solid rgba(255,124,56,0.3);
+  }
+
+  .chevron {
+    width: 14px; height: 14px;
+    opacity: 0.4;
+    transition: transform 0.22s;
+    flex-shrink: 0;
+  }
+
+  .university-section.collapsed .chevron { transform: rotate(-90deg); }
+
+  .contacts-wrap {
+    overflow-x: auto;
+    background: rgba(10,12,18,0.6);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .university-section.collapsed .contacts-wrap { display: none; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.72rem;
+  }
+
+  thead tr { border-bottom: 0.5px solid var(--glass-border); }
+
+  th {
+    padding: 0.6rem 0.85rem;
+    text-align: left;
+    font-weight: 400;
+    font-size: 0.58rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 0.65rem 0.85rem;
+    color: var(--text-secondary);
+    border-bottom: 0.5px solid rgba(255,255,255,0.04);
+    vertical-align: middle;
+  }
+
+  tr:last-child td { border-bottom: none; }
+
+  tbody tr { transition: background 0.15s; }
+  tbody tr:hover td { background: rgba(255,255,255,0.03); color: var(--text-primary); }
+
+  td.name-cell { color: var(--text-primary); font-weight: 400; white-space: nowrap; }
+
+  td.email-cell {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+  }
+
+  td.email-cell a {
+    color: rgba(100,160,255,0.85);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+
+  td.email-cell a:hover { color: #78aaff; text-decoration: underline; }
+
+  .tier-pill {
+    display: inline-block;
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: rgba(255,124,56,0.15);
+    color: var(--accent);
+    border: 0.5px solid rgba(255,124,56,0.35);
+    min-width: 2rem;
+    text-align: center;
+  }
+
+  .track-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 0.58rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    border: 0.5px solid;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tb-1 { background: rgba(255,124,56,0.12); color: #ffb38a; border-color: rgba(255,124,56,0.3); }
+  .tb-2 { background: rgba(60,180,220,0.12); color: #7dd3f5; border-color: rgba(60,180,220,0.28); }
+  .tb-3 { background: rgba(240,200,80,0.12); color: #f5df8a; border-color: rgba(240,200,80,0.28); }
+  .tb-4 { background: rgba(140,100,255,0.12); color: #c4b5ff; border-color: rgba(140,100,255,0.3); }
+  .tb-5 { background: rgba(255,160,90,0.1); color: #ffcc99; border-color: rgba(255,160,90,0.28); }
+  .tb-6 { background: rgba(80,200,130,0.1); color: #8feeb8; border-color: rgba(80,200,130,0.28); }
+  .tb-7 { background: rgba(255,100,160,0.1); color: #ffaac8; border-color: rgba(255,100,160,0.28); }
+  .tb-8 { background: rgba(100,220,140,0.1); color: #9af0bc; border-color: rgba(100,220,140,0.26); }
+  .tb-9 { background: rgba(255,90,90,0.1); color: #ff9e9e; border-color: rgba(255,90,90,0.28); }
+  .tb-0 { background: rgba(255,255,255,0.06); color: var(--text-secondary); border-color: var(--glass-border); }
+
+  .conf-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  .conf-high .conf-dot { background: #4cd97b; }
+  .conf-medium .conf-dot { background: #f0b429; }
+  .conf-low .conf-dot { background: #888; }
+
+  .conf-text {
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    vertical-align: middle;
+  }
+
+  .conf-high .conf-text { color: #4cd97b; }
+  .conf-medium .conf-text { color: #f0b429; }
+  .conf-low .conf-text { color: #666; }
+
+  .phone-cell { color: var(--text-muted); font-size: 0.68rem; }
+
+  .empty {
+    padding: 3rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+  }
+
+  .export-btn {
+    height: 38px;
+    padding: 0 18px;
+    border-radius: var(--radius-sm);
+    border: 0.5px solid rgba(255,124,56,0.4);
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.07em;
+    cursor: pointer;
+    transition: all 0.18s;
+    white-space: nowrap;
+  }
+
+  .export-btn:hover { background: rgba(255,124,56,0.28); }
+
+  .upload-zone {
+    border: 0.5px dashed var(--glass-border);
+    border-radius: var(--radius);
+    padding: 2.5rem;
+    text-align: center;
+    margin-bottom: 2rem;
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  .upload-zone p { color: var(--text-secondary); font-size: 0.8rem; line-height: 1.7; }
+  .upload-zone strong { color: var(--accent); font-weight: 400; }
+  .upload-zone input { display: none; }
+
+  .results-count {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    margin-left: auto;
+    letter-spacing: 0.05em;
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <header>
+    <div class="brand">
+      <div class="logo-mark">B</div>
+      <h1>
+        <span>Biryani Blitz</span>
+        Outreach Dashboard
+      </h1>
+    </div>
+    <button class="export-btn" id="exportBtn" type="button" onclick="exportCSV()">Export CSV</button>
+  </header>
+
+  <div class="stats-bar" id="statsBar">
+    <div class="stat-cell"><div class="stat-num" id="statTotal">—</div><div class="stat-label">Total</div></div>
+    <div class="stat-cell"><div class="stat-num" id="statUniversities">—</div><div class="stat-label">Universities</div></div>
+    <div class="stat-cell"><div class="stat-num" id="statHigh">—</div><div class="stat-label">High conf.</div></div>
+    <div class="stat-cell"><div class="stat-num" id="statT1">—</div><div class="stat-label">T1 Union</div></div>
+    <div class="stat-cell"><div class="stat-num" id="statT3">—</div><div class="stat-label">T3 Stu Gov</div></div>
+    <div class="stat-cell"><div class="stat-num" id="statT5">—</div><div class="stat-label">T5 Cultural</div></div>
+  </div>
+
+  <div class="controls">
+    <div class="search-wrap">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="6.5" cy="6.5" r="4.5"/><path d="M10.5 10.5L14 14"/>
+      </svg>
+      <input type="search" id="searchInput" placeholder="Search name, title, email, track…" oninput="render()">
+    </div>
+    <select id="tierFilter" onchange="render()">
+      <option value="">All tiers</option>
+      <option value="1">T1 — Student Union / Commercial</option>
+      <option value="2">T2 — Student Life / Experience</option>
+      <option value="3">T3 — Student Government</option>
+      <option value="4">T4 — Entrepreneurship</option>
+      <option value="5">T5 — Cultural / South Asian</option>
+      <option value="6">T6 — Sustainability lists</option>
+      <option value="7">T7 — Food truck / mobile</option>
+      <option value="8">T8 — Campus dining</option>
+      <option value="9">T9 — EHS / food safety</option>
+    </select>
+    <select id="confFilter" onchange="render()">
+      <option value="">All confidence</option>
+      <option value="high">High</option>
+      <option value="medium">Medium</option>
+      <option value="low">Low</option>
+    </select>
+    <button class="filter-btn" id="btnCollapse" type="button" onclick="toggleAll(false)">Collapse all</button>
+    <button class="filter-btn" type="button" onclick="toggleAll(true)">Expand all</button>
+    <span class="results-count" id="resultsCount"></span>
+  </div>
+
+  <div id="uploadSection">
+    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()"
+         ondragover="event.preventDefault(); this.classList.add('drag-over')"
+         ondragleave="this.classList.remove('drag-over')"
+         ondrop="handleDrop(event)">
+      <input type="file" id="fileInput" accept=".json,.csv" onchange="handleFile(event)">
+      <p>
+        <strong>Drop agent output here</strong><br>
+        <code>biryani_blitz_contacts.json</code> or <code>.csv</code> (includes <code>tier</code> columns)<br>
+        <span style="font-size:0.7rem; color: var(--text-muted);">Or click to browse</span>
+      </p>
+    </div>
+  </div>
+
+  <div id="mainTable"></div>
+</div>
+
+<script>
+let allContacts = [];
+let collapsedState = {};
+let uniRankMap = {};
+
+function parseTier(val) {
+  const n = parseInt(String(val), 10);
+  return (n >= 1 && n <= 9) ? n : 0;
+}
+
+function normalizeContact(raw) {
+  const tier = parseTier(raw.tier);
+  const tier_label = raw.tier_label || '';
+  return {
+    ...raw,
+    tier,
+    tier_label,
+    department: raw.department || '',
+    confidence: raw.confidence || 'low',
+  };
+}
+
+const SAMPLE_DATA = [
+  normalizeContact({ university: 'UC Berkeley (UCB)', name: 'Ryan Adelman-Sessler', title: 'Director, Business Development & Commercial Activities', department: 'Student Union', email: 'ryansessler@berkeley.edu', phone: '(510) 387-2246', confidence: 'high', source_url: 'https://studentunion.berkeley.edu', tier: 1, tier_label: 'Student Union / Commercial Activities' }),
+  normalizeContact({ university: 'UC Berkeley (UCB)', name: 'Jaime Santoyo', title: 'Director, Facilities Maintenance & Operations', department: 'Student Union', email: 'jsantoyo@berkeley.edu', phone: '(510) 664-7531', confidence: 'high', source_url: 'https://studentunion.berkeley.edu', tier: 1, tier_label: 'Student Union / Commercial Activities' }),
+  normalizeContact({ university: 'UC Berkeley (UCB)', name: 'Ariel Feinberg-Berson', title: 'Director of Programs & Marketing', department: 'Student Union', email: 'aberson@berkeley.edu', phone: null, confidence: 'high', source_url: 'https://studentunion.berkeley.edu', tier: 1, tier_label: 'Student Union / Commercial Activities' }),
+  normalizeContact({ university: 'UC Berkeley (UCB)', name: 'Huw Thornton', title: 'Cafe Manager, Goldie\'s Coffee', department: 'Dining', email: 'huwthornton@berkeley.edu', phone: '(510) 508-6722', confidence: 'high', source_url: 'https://dining.berkeley.edu', tier: 8, tier_label: 'Campus Dining / Auxiliary' }),
+  normalizeContact({ university: 'New York University (NYU)', name: 'Frank Rimalovski', title: 'Executive Director, Entrepreneurial Institute', department: 'Entrepreneurship', email: 'entrepreneur@nyu.edu', phone: null, confidence: 'high', source_url: 'https://entrepreneurship.nyu.edu', tier: 4, tier_label: 'Entrepreneurship' }),
+  normalizeContact({ university: 'University of Texas at Austin (UT Austin)', name: 'Food Truck Programs (inbox)', title: 'University Unions — mobile vendor line', department: 'Other', email: 'foodtrucks@utexas.edu', phone: null, confidence: 'medium', source_url: 'https://universityunions.utexas.edu', tier: 7, tier_label: 'Food Truck / Mobile Vendor' }),
+  normalizeContact({ university: 'University of Texas at Austin (UT Austin)', name: 'Sustainability (inbox)', title: 'Green events / vendor database', department: 'Sustainability', email: 'sustainability@austin.utexas.edu', phone: null, confidence: 'medium', source_url: 'https://sustainability.utexas.edu', tier: 6, tier_label: 'Sustainability / Green Vendor Lists' }),
+];
+
+function loadSample() {
+  allContacts = SAMPLE_DATA;
+  document.getElementById('uploadSection').style.display = 'none';
+  updateStats();
+  render();
+}
+
+function handleFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  readFile(file);
+}
+
+function handleDrop(event) {
+  event.preventDefault();
+  document.getElementById('uploadZone').classList.remove('drag-over');
+  const file = event.dataTransfer.files[0];
+  if (!file) return;
+  readFile(file);
+}
+
+function readFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      if (file.name.endsWith('.json')) {
+        const data = JSON.parse(e.target.result);
+        allContacts = Array.isArray(data) ? data.map(normalizeContact) : [];
+      } else {
+        allContacts = parseCSV(e.target.result).map(normalizeContact);
+      }
+      document.getElementById('uploadSection').style.display = 'none';
+      updateStats();
+      render();
+    } catch (err) {
+      alert('Could not parse file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  if (!lines.length) return [];
+  const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+  return lines.slice(1).map(line => {
+    const vals = [];
+    let cur = '', inQ = false;
+    for (const ch of line) {
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === ',' && !inQ) { vals.push(cur); cur = ''; }
+      else cur += ch;
+    }
+    vals.push(cur);
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = (vals[i] || '').replace(/"/g, '').trim(); });
+    return obj;
+  }).filter(r => r.email);
+}
+
+function updateStats() {
+  const total = allContacts.length;
+  const unis = new Set(allContacts.map(c => c.university)).size;
+  const high = allContacts.filter(c => c.confidence === 'high').length;
+  const t1 = allContacts.filter(c => parseTier(c.tier) === 1).length;
+  const t3 = allContacts.filter(c => parseTier(c.tier) === 3).length;
+  const t5 = allContacts.filter(c => parseTier(c.tier) === 5).length;
+
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statUniversities').textContent = unis;
+  document.getElementById('statHigh').textContent = high;
+  document.getElementById('statT1').textContent = t1;
+  document.getElementById('statT3').textContent = t3;
+  document.getElementById('statT5').textContent = t5;
+}
+
+function getFiltered() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const tier = document.getElementById('tierFilter').value;
+  const conf = document.getElementById('confFilter').value;
+
+  return allContacts.filter(c => {
+    if (tier && String(parseTier(c.tier)) !== tier) return false;
+    if (conf && c.confidence !== conf) return false;
+    if (q) {
+      const hay = [c.name, c.title, c.email, c.university, c.department, c.phone, c.tier_label].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function groupByUniversity(contacts) {
+  const map = {};
+  contacts.forEach(c => {
+    const key = c.university || 'Unknown';
+    if (!map[key]) map[key] = [];
+    map[key].push(c);
+  });
+  return map;
+}
+
+function trackClass(tier) {
+  const t = parseTier(tier);
+  return 'track-badge tb-' + (t || 0);
+}
+
+function tierPill(tier) {
+  const t = parseTier(tier);
+  if (!t) return '—';
+  return `<span class="tier-pill">T${t}</span>`;
+}
+
+function escapeHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+function render() {
+  const filtered = getFiltered();
+  const grouped = groupByUniversity(filtered);
+  const uniNames = Object.keys(grouped).sort();
+  const container = document.getElementById('mainTable');
+
+  document.getElementById('resultsCount').textContent =
+    filtered.length !== allContacts.length
+      ? `${filtered.length} of ${allContacts.length} contacts`
+      : `${allContacts.length} contacts`;
+
+  if (uniNames.length === 0) {
+    container.innerHTML = '<div class="empty">No contacts match your filters</div>';
+    return;
+  }
+
+  let rank = 1;
+  container.innerHTML = uniNames.map(uniName => {
+    const contacts = grouped[uniName];
+    const collapsed = collapsedState[uniName] === true;
+    const r = uniRankMap[uniName] || (uniRankMap[uniName] = rank++);
+
+    const rows = contacts.map(c => {
+      const confClass = `conf-${c.confidence || 'low'}`;
+      const emailHtml = c.email
+        ? `<a href="mailto:${escapeHtml(c.email)}">${escapeHtml(c.email)}</a>`
+        : '<span style="opacity:0.3">—</span>';
+      const phoneHtml = c.phone && c.phone !== 'null'
+        ? `<span class="phone-cell">${escapeHtml(c.phone)}</span>`
+        : '<span style="opacity:0.2">—</span>';
+      const label = c.tier_label || '—';
+
+      return `<tr>
+        <td>${tierPill(c.tier)}</td>
+        <td class="name-cell">${escapeHtml(c.name) || '—'}</td>
+        <td>${escapeHtml(c.title) || '—'}</td>
+        <td><span class="${trackClass(c.tier)}">${escapeHtml(label)}</span></td>
+        <td class="email-cell">${emailHtml}</td>
+        <td>${phoneHtml}</td>
+        <td><span class="${confClass}"><span class="conf-dot"></span><span class="conf-text">${escapeHtml(c.confidence) || '—'}</span></span></td>
+      </tr>`;
+    }).join('');
+
+    const safeKey = uniName.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    return `<div class="university-section${collapsed ? ' collapsed' : ''}" data-uni="${escapeHtml(uniName)}">
+      <div class="university-header" onclick="toggleSection('${safeKey}')">
+        <span class="uni-rank">#${String(r).padStart(2,'0')}</span>
+        <span class="uni-name">${escapeHtml(uniName)}</span>
+        <span class="uni-city"></span>
+        <span class="uni-count">${contacts.length} contact${contacts.length !== 1 ? 's' : ''}</span>
+        <svg class="chevron" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M3 5l4 4 4-4"/>
+        </svg>
+      </div>
+      <div class="contacts-wrap">
+        <table>
+          <thead><tr>
+            <th>Tier</th><th>Name</th><th>Title</th><th>Track</th>
+            <th>Email</th><th>Phone</th><th>Conf.</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleSection(uniName) {
+  collapsedState[uniName] = !collapsedState[uniName];
+  render();
+}
+
+function toggleAll(expand) {
+  const filtered = getFiltered();
+  const grouped = groupByUniversity(filtered);
+  Object.keys(grouped).forEach(u => { collapsedState[u] = !expand; });
+  render();
+}
+
+function exportCSV() {
+  const filtered = getFiltered();
+  if (!filtered.length) return;
+  const headers = ['university','tier','tier_label','name','title','department','email','phone','confidence','source_url'];
+  const esc = v => `"${String(v ?? '').replace(/"/g,'""')}"`;
+  const rows = [headers.join(','), ...filtered.map(c => headers.map(h => esc(c[h])).join(','))];
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'biryani_blitz_contacts.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+loadSample();
+</script>
+</body>
+</html>
