@@ -9,9 +9,15 @@
  *   GEMINI_MODEL — default gemini-2.0-flash (1.5 models were removed from the API)
  *   GEMINI_RESOLVE_UNIVERSITY=1 — optional extra Gemini call per school to expand abbreviations (uses quota; default off)
  *   LLM_PROVIDER=gemini|openrouter — extraction provider (default gemini)
- *   OPENROUTER_API_KEY — enables OpenRouter extraction fallback
+ *   OPENROUTER_API_KEY — OpenRouter for canonical names, terminology, domain resolve, extraction fallback
  *   OPENROUTER_MODEL — default meta-llama/llama-3.1-8b-instruct:free
  *   MULTI_STAGE_SEARCH=0 — disable per-category office resolution + people/directory crawl (default on)
+ *   DOMAIN_ANCHORED_SEARCH=0 — disable "@domain.edu" / site:domain title queries (default on)
+ *   CRAWL_PEOPLE_DEPTH — BFS depth for people/staff link crawl (default 2)
+ *   CRAWL_PEOPLE_MAX_PAGES — max pages opened in that crawl (default 24)
+ *   SUBDOMAIN_CONTACT_CAP — max contacts to collect per hostname before skipping more URLs (default 3)
+ *   VERIFY_MX=1 — drop contacts whose email domain has no MX record (optional)
+ *   CONTACT_SCORER=auto|llm|regex — post-extract mandate filter (externality vs seniority; default auto: LLM if keys set)
  *
  * Examples:
  *   npm run scrape:batch -- --max 3
@@ -21,6 +27,7 @@
 
 import fs from "fs";
 import path from "path";
+import { promises as dns } from "node:dns";
 import { chromium } from "playwright";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
@@ -33,8 +40,66 @@ const SEARCH_LLM_TERMS = process.env.SEARCH_LLM_TERMS !== "0";
 const MULTI_STAGE_SEARCH = process.env.MULTI_STAGE_SEARCH !== "0";
 /** Expand "UT Austin" → full official name for search + contact rows (OpenRouter). Set CANONICAL_UNIVERSITY_NAMES=0 to disable. */
 const CANONICAL_UNIVERSITY_NAMES = process.env.CANONICAL_UNIVERSITY_NAMES !== "0";
+/** Prefer "@domain.edu" + title queries over generic department searches (set DOMAIN_ANCHORED_SEARCH=0 to disable). */
+const DOMAIN_ANCHORED_SEARCH = process.env.DOMAIN_ANCHORED_SEARCH !== "0";
+const CRAWL_PEOPLE_DEPTH = Math.min(4, Math.max(1, parseInt(process.env.CRAWL_PEOPLE_DEPTH || "2", 10) || 2));
+const CRAWL_PEOPLE_MAX_PAGES = Math.min(48, Math.max(6, parseInt(process.env.CRAWL_PEOPLE_MAX_PAGES || "24", 10) || 24));
+const SUBDOMAIN_CONTACT_CAP = Math.max(1, parseInt(process.env.SUBDOMAIN_CONTACT_CAP || "3", 10) || 3);
+const VERIFY_MX = process.env.VERIFY_MX === "1";
+/** auto = LLM when OPENROUTER_API_KEY or GOOGLE_API_KEY; regex = keyword mandate filter only; llm = require scorer call */
+const CONTACT_SCORER = (process.env.CONTACT_SCORER || "auto").toLowerCase();
 
 const DEFAULT_DATA = path.join("data", "universities.json");
+
+/** Verbatim outreach mandate + tier routing guidance for the post-extract LLM scorer (job externality, not org-chart seniority). */
+const BIRYANI_MANDATE_TIER_GUIDANCE = `
+The real filter criterion
+
+A contact is worth targeting if their role exists to deal with people outside their department. That's a fundamentally different question from "are they senior enough." A Facilities Coordinator like Makossa at Berkeley responded constantly and was operationally critical — she's not a VP. Ryan responded because vendor partnerships is literally his job. Kim the dietitian responded because food policy review is literally her job.
+
+The question to ask for each role is: does this person's job description include processing inbound requests from external parties or students? If yes, they will respond. If their job is purely internal operations or academic, they won't.
+
+Reworked tier logic by response-likelihood reasoning:
+
+C1 — Student Union / Commercial Keep anyone with "commercial," "vendor," "partnerships," "business development," or "auxiliary enterprises" in their title. These people have an explicit mandate to evaluate and onboard external vendors. Even a coordinator-level person in this category will respond and can escalate. Drop: facilities managers who don't touch vendor contracts, IT, administrative assistants.
+
+C2 — Student Life / Experience Narrow this significantly. VPs of Student Affairs almost never respond to cold vendor outreach — they're too senior and too internal. The sweet spot is Director of Student Experience or Director of Student Engagement — mid-level, externally facing, responsible for making campus life better and therefore incentivized to say yes to novel student-relevant products. Drop: deans, VPs, anyone with "assessment" or "compliance" in their title.
+
+C3 — Student Government Completely rethink this one. Elected student government presidents and VPs are actually high response rate targets because they're students, they check their email constantly, they're actively looking for things to champion, and their entire job is constituent-facing. The mistake is targeting the staff advisor to student government (internal-facing) instead of the elected officers themselves. Target: President, VP Internal Affairs, VP Student Services — the elected students, not the staff.
+
+C4 — Entrepreneurship Good response rates but for the wrong reason — they'll meet with you but can't approve placement. Target the program coordinator or associate director level, not the executive director. The program coordinator runs day-to-day student programming and is looking for startups to feature. The executive director is a fundraiser who doesn't have time. Drop: faculty directors, research associates.
+
+C5 — Cultural / South Asian Split this into two separate contacts per university: the staff director of the multicultural center (externally facing, approves vendor partnerships for events) and the president of the South Asian student association (a student, will respond immediately, is your grassroots channel). These are different outreach tracks — the staff director is a formal partner, the student president is a word-of-mouth amplifier.
+
+C6 — Sustainability The right contact is whoever manages the food vendor sustainability database or approved vendor list — not the director of sustainability generally. At UT Austin this was a specific email alias (sustainability@austin.utexas.edu) that handles vendor inclusion requests. This is a form-filling exercise more than a relationship, but getting listed means passive inbound from student orgs planning events. Target: zero waste coordinator, food vendor database coordinator, green events coordinator.
+
+C7 — Food Truck / Mobile Highest response rate of any tier because there's almost always a named inbox or coordinator specifically for this and the approval process is lighter than a full vending contract. This is your fastest path to any physical campus presence. Target: whoever manages foodtrucks@university.edu equivalent — usually a coordinator-level person within University Unions, not a director.
+
+C8 — Campus Dining Lowest response rate and most hostile tier. These are Aramark/Sodexo-contracted operations people who see you as competition. The only useful contact here is the catering or special events coordinator within dining — they handle outside vendor approvals for specific events and are accustomed to saying yes to things their main dining operation doesn't cover. Drop: directors, AVPs, anyone with "operations" or "procurement" in title.
+
+C9 — EHS / Food Safety Don't treat this as an outreach target — treat it as a pre-clearance step. Email them before you pitch anyone else at that school, introduce Biryani Blitz, attach your certifications proactively, and ask what permits a hot food vending machine requires. This is the Berkeley lesson: EHS blindsided you because they weren't looped in early. An EHS coordinator who gets a proactive compliance inquiry will almost always respond, because it's a simple administrative task for them and it's their literal job. Response rate is high precisely because you're not asking them for anything they'd resist.
+
+The unified decision rule for whether to include a contact:
+
+Include if ALL of:
+  1. Title contains an external-facing verb or noun:
+     coordinator, partnerships, vendor, commercial, outreach,
+     engagement, events, programs, services, development
+  2. OR the role is elected student-facing (student gov, cultural org president)
+  3. OR the role is a named compliance/permit processor (EHS, food safety)
+
+(When scoring: treat items 1–3 as alternatives — a contact qualifies if at least one of these positive patterns applies, and none of the exclusions below apply.)
+
+Exclude if ANY of:
+  1. Title is purely internal: assessment, analytics, research, budget,
+     compliance (non-food), HR, IT, facilities (non-vendor)
+  2. Title is VP or Dean or Associate Vice Chancellor — too senior,
+     wrong entry point
+  3. Title contains "assistant to" — gatekeeper not decision-maker
+  4. Role is academic/faculty
+
+The insight: target job mandate externality, not org chart seniority. A coordinator whose job is to process vendor applications is worth more than a VP whose job is strategic oversight. Tier is a secondary label for routing rather than a raw quality signal.
+`;
 
 /** Short hints for LLM: real campus office / program names (e.g. Carolina Union, Division of Student Affairs). */
 const TIER_OFFICE_HINT = {
@@ -49,11 +114,6 @@ const TIER_OFFICE_HINT = {
   9: "environmental health and safety, EHS, food safety permits, temporary event permits",
 };
 
-/** After quota/rate-limit on university resolve, skip further resolve calls this run. */
-let geminiSkipUniversityResolve = false;
-/** After quota/rate-limit on extraction, skip further Gemini extraction calls this run. */
-let geminiSkipExtract = false;
-
 function parseArgs() {
   const args = process.argv.slice(2);
   const envResolve =
@@ -65,6 +125,7 @@ function parseArgs() {
     university: "",
     dataPath: DEFAULT_DATA,
     out: path.join("output", "gemini_contacts.json"),
+    inferredOut: path.join("output", "inferred_contacts.json"),
     max: null,
     start: 0,
     pagesPerSchool: 5,
@@ -80,6 +141,7 @@ function parseArgs() {
     else if (a === "--url") opts.urls.push(args[++i]);
     else if (a === "--university") opts.university = args[++i] || "";
     else if (a === "--out") opts.out = args[++i] || opts.out;
+    else if (a === "--inferred-out") opts.inferredOut = args[++i] || opts.inferredOut;
     else if (a === "--data") opts.dataPath = args[++i] || opts.dataPath;
     else if (a === "--max") opts.max = parseInt(args[++i], 10);
     else if (a === "--start") opts.start = parseInt(args[++i], 10) || 0;
@@ -108,7 +170,25 @@ function normalizeTiers(tiers) {
   return [...new Set(tiers)].filter((n) => n >= 1 && n <= 9).sort((a, b) => a - b);
 }
 
-function buildTierQueries(shortName, entrepreneurship, tiers, tierAliasesByNumber = {}) {
+function buildTierQueries(shortName, entrepreneurship, tiers, tierAliasesByNumber = {}, primaryDomain = "") {
+  const domain =
+    DOMAIN_ANCHORED_SEARCH && normalizeDomainHint(primaryDomain) ? normalizeDomainHint(primaryDomain) : "";
+  if (domain) {
+    const queries = [];
+    for (const t of tiers) {
+      const aliases = Array.isArray(tierAliasesByNumber?.[String(t)])
+        ? tierAliasesByNumber[String(t)]
+        : Array.isArray(tierAliasesByNumber?.[t])
+          ? tierAliasesByNumber[t]
+          : [];
+      const officeLike = {
+        office_names: aliases.length ? [String(aliases[0]).trim()] : [],
+        seed_queries: [],
+      };
+      queries.push(...buildDomainAnchoredQueries(shortName, entrepreneurship, t, officeLike, domain));
+    }
+    if (queries.length) return queries;
+  }
   const s = shortName.replace(/\s*\([^)]+\)\s*/g, " ").trim();
   const ent = (entrepreneurship || "entrepreneurship center").trim();
   const tierPhrase = {
@@ -140,8 +220,17 @@ function buildTierQueries(shortName, entrepreneurship, tiers, tierAliasesByNumbe
   return queries;
 }
 
-/** Multi-stage: LLM office names + same queries as single-stage for each tier. */
-function buildQueriesForTierWithOffices(shortName, entrepreneurship, tier, tierAliasesByNumber, officeInfo) {
+/** Multi-stage: LLM office names + domain-anchored or legacy category queries. */
+function buildQueriesForTierWithOffices(shortName, entrepreneurship, tier, tierAliasesByNumber, officeInfo, primaryDomain = "") {
+  const mergedDomain =
+    DOMAIN_ANCHORED_SEARCH &&
+    (normalizeDomainHint(primaryDomain) || normalizeDomainHint(officeInfo?.primary_domain_hint))
+      ? normalizeDomainHint(primaryDomain) || normalizeDomainHint(officeInfo?.primary_domain_hint)
+      : "";
+  if (mergedDomain) {
+    const anchored = buildDomainAnchoredQueries(shortName, entrepreneurship, tier, officeInfo, mergedDomain);
+    if (anchored.length) return anchored;
+  }
   const s = shortName.replace(/\s*\([^)]+\)\s*/g, " ").trim();
   const ent = (entrepreneurship || "entrepreneurship center").trim();
   const tierPhrase = {
@@ -184,6 +273,533 @@ function buildQueriesForTierWithOffices(shortName, entrepreneurship, tier, tierA
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+async function withRetry(fn, { maxAttempts = 4, baseDelayMs = 2000, label = "op", isRetryable = () => true } = {}) {
+  let lastErr;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      const msg = String(e?.message || e);
+      if (!isRetryable(msg) || attempt === maxAttempts) throw e;
+      const delay = baseDelayMs * 2 ** (attempt - 1) + Math.random() * 1000;
+      console.log(`  ⏳ ${label}: retry in ${Math.round(delay / 1000)}s (${attempt}/${maxAttempts})`);
+      await sleep(delay);
+    }
+  }
+  throw lastErr;
+}
+
+function normalizeDomainHint(h) {
+  let d = String(h || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/\/.*$/, "");
+  if (d.startsWith("www.")) d = d.slice(4);
+  return d.replace(/^mailto:/, "").split("?")[0].trim();
+}
+
+/** URL path/host signal for outreach tier (stronger than title-only guessing). */
+function classifyUrlTier(url) {
+  const s = String(url || "").toLowerCase();
+  const rules = [
+    [/studentunion|\.union\.|unions\.|carolina union|campus.?union|auxiliary|commercial.?service|vendor/, 1],
+    [/studentaffairs|studentlife|student-affairs|deanofstudents|student-life|student experience/, 2],
+    [/studentgov|student-gov|studentgovernment|\.sg\.|asuc|student senate|student assembly/, 3],
+    [/entrepreneurship|innovation|venture|startup|incubator/, 4],
+    [/multicultural|diversity|cultural|south.?asian|intercultural/, 5],
+    [/sustainab|climate action|green\.|zero.?waste/, 6],
+    [/food.?truck|mobile.?vend|street.?food|vending/, 7],
+    [/dining|foodservice|auxiliary.?dining|culinary|campus.?dish/, 8],
+    [/environmental.?health|ehs|eh&s|food.?safety|permit/, 9],
+  ];
+  for (const [re, tier] of rules) {
+    if (re.test(s)) return tier;
+  }
+  return null;
+}
+
+/** Fast-path: elected student officers on student-org URLs (skip externality/decision scoring). */
+function isElectedStudentOrgFastPath(title, sourceUrl) {
+  const t = String(title || "");
+  const hasRole =
+    /\b(president|vice\s*president|\bvp\b|chair|vice-?\s*chair|chief\s+of\s+staff)\b/i.test(t) ||
+    /\bvp\s+(internal|external|student|academic|affairs)\b/i.test(t);
+  if (!hasRole) return false;
+  const u = String(sourceUrl || "").toLowerCase();
+  const orgHost =
+    /studentgov|student-gov|studentgovernment|\.sg\.|asuc|asg|student-org|studentorg|senate|assembly|involvement|orgs\.|sao\.|studentactivities|student-life|studentlife|sga|studentassociation/.test(
+      u
+    );
+  return orgHost;
+}
+
+function shouldUseLlmMandateScorer() {
+  if (CONTACT_SCORER === "regex") return false;
+  if (CONTACT_SCORER === "llm") return true;
+  return !!(OPENROUTER_API_KEY || API_KEY);
+}
+
+/** Regex fallback for mandate rules when LLM is off or fails. */
+function filterContactsByRegexMandate(rows) {
+  const out = [];
+  let dropped = 0;
+  const positive =
+    /coordinator|partnerships?|vendor|commercial|outreach|engagement|events?|programs?|services?|development|permit|compliance|ehs|food\s*safety|environmental\s*health|sustainability|zero\s*waste|green\s*events|dining|truck|mobile|vend|auxiliary|entrepreneur|multicultural|student\s*gov|senate/i;
+  const negative =
+    /\b(vp|vice\s*president|dean|associate\s+vice\s+chancellor|avp)\b|assistant\s+to\b|assessment|analytics|research|facilit|budget\s+analyst|human\s+resources|\bhr\b|\bit\b|faculty|professor|lecturer|assistant\s+professor/i;
+  const internalOnly =
+    /\bassessment\b|\banalytics\b|\bresearch\b(?!\s+associate)|\bcompliance\b(?!\s+food)|facilities(?!\s+.*vendor)/i;
+
+  for (const c of rows || []) {
+    const title = String(c.title || c.name || "");
+    if (c.evidence === "literal" && positive.test(title)) {
+      out.push({
+        ...c,
+        mandate_include: true,
+        mandate_scorer: "regex_fallback",
+        mandate_exclude_reason: null,
+        mandate_externality: 0.75,
+        mandate_decision_proximity: 0.5,
+        mandate_tier_suggested: c.tier ?? null,
+      });
+      continue;
+    }
+    if (negative.test(title) || internalOnly.test(title)) {
+      dropped++;
+      continue;
+    }
+    if (positive.test(title)) {
+      out.push({
+        ...c,
+        mandate_include: true,
+        mandate_scorer: "regex_fallback",
+        mandate_exclude_reason: null,
+        mandate_externality: 0.72,
+        mandate_decision_proximity: 0.45,
+        mandate_tier_suggested: c.tier ?? null,
+      });
+      continue;
+    }
+    if (c.evidence === "literal") {
+      out.push({
+        ...c,
+        mandate_include: true,
+        mandate_scorer: "regex_fallback_literal",
+        mandate_exclude_reason: null,
+        mandate_externality: 0.65,
+        mandate_decision_proximity: 0.42,
+        mandate_tier_suggested: c.tier ?? null,
+      });
+      continue;
+    }
+    dropped++;
+  }
+  console.log(`      ↪ mandate filter (regex): kept ${out.length}, dropped ${dropped}`);
+  return out;
+}
+
+function mergeMandateScores(contacts, results) {
+  const byIdx = new Map();
+  for (const r of results || []) {
+    const i = Number(r.index);
+    if (Number.isFinite(i)) byIdx.set(i, r);
+  }
+  return contacts.map((c, i) => {
+    const r = byIdx.get(i);
+    if (!r) {
+      return {
+        ...c,
+        mandate_include: false,
+        mandate_scorer: "llm",
+        mandate_exclude_reason: "scorer_missing",
+        mandate_externality: null,
+        mandate_decision_proximity: null,
+        mandate_tier_suggested: c.tier ?? null,
+      };
+    }
+    const ext = Number(r.externality);
+    const dp = Number(r.decision_proximity);
+    let tier = r.tier;
+    if (tier != null && tier !== "") tier = Number(tier);
+    else tier = null;
+    if (!Number.isFinite(tier)) tier = c.tier ?? null;
+    return {
+      ...c,
+      mandate_include: !!r.include,
+      mandate_scorer: "llm",
+      mandate_exclude_reason: r.exclude_reason ?? null,
+      mandate_externality: Number.isFinite(ext) ? ext : null,
+      mandate_decision_proximity: Number.isFinite(dp) ? dp : null,
+      mandate_tier_suggested: tier,
+    };
+  });
+}
+
+async function scoreContactsMandateLLM(contacts, pageContext, sourceUrl) {
+  if (!contacts.length) return [];
+  const payload = contacts.map((c, i) => ({
+    index: i,
+    name: c.name,
+    title: c.title,
+    department: c.department || null,
+    email: c.email,
+    existing_tier_hint: c.tier ?? null,
+  }));
+
+  const prompt = `Score each university staff or student contact for Biryani Blitz outreach.
+
+Biryani Blitz places automated hot food vending machines in university student unions and similar campus locations. We need contacts whose job mandate includes processing inbound requests from external parties or students — not raw org-chart seniority.
+
+${BIRYANI_MANDATE_TIER_GUIDANCE}
+
+Source page URL: ${sourceUrl}
+Page context (truncated):
+---
+${String(pageContext || "").slice(0, 4000)}
+---
+
+Contacts to score (use title + page context; titles alone are often ambiguous):
+${JSON.stringify(payload, null, 2)}
+
+For EACH contact, return:
+- externality (0.0–1.0): does this role face outward to vendors, students, or external partners?
+- decision_proximity (0.0–1.0): can they initiate or meaningfully influence a vendor placement, event approval, or the correct approval path?
+- exclude_reason: null OR one of "too senior" | "internal only" | "academic" | "wrong dept" | "gatekeeper" | "hostile_dining_ops" | "other"
+- tier: integer 1–9 or null (routing label only)
+- include: boolean
+
+Decision rules:
+- Include if (externality > 0.7 AND decision_proximity > 0.4), EXCEPT use judgment below.
+- Elected student government or cultural org officers: high include when title is elected role (President, VP, Chair) and student-facing; staff advisors to those bodies are often internal-only (exclude).
+- EHS / food safety / permit: include (true) for pre-clearance channel even if placement decision_proximity is low — they are mandatory early contacts.
+- Campus dining (tier 8): only include catering/special-events style roles that approve outside vendors for events; drop directors/ops/procurement per guidance.
+
+Return ONLY valid JSON (no markdown):
+{ "results": [ { "index": 0, "externality": 0.0, "decision_proximity": 0.0, "exclude_reason": null, "tier": null, "include": false } ] }
+The results array MUST have one object per contact, same index order as input, length ${contacts.length}.`;
+
+  if (OPENROUTER_API_KEY) {
+    const resp = await withRetry(
+      async () => {
+        const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: OPENROUTER_MODEL,
+            temperature: 0.1,
+            messages: [
+              { role: "system", content: "Return only strict JSON. No markdown." },
+              { role: "user", content: prompt },
+            ],
+          }),
+        });
+        if (r.status === 429 || r.status === 503) {
+          const t = await r.text().catch(() => "");
+          throw new Error(`OpenRouter ${r.status}: ${t.slice(0, 120)}`);
+        }
+        if (!r.ok) {
+          const t = await r.text().catch(() => "");
+          throw new Error(`OpenRouter ${r.status}: ${t.slice(0, 220)}`);
+        }
+        return r;
+      },
+      { label: "OpenRouter mandate score", maxAttempts: 3, isRetryable: (msg) => /429|503|rate|quota/i.test(String(msg)) }
+    );
+    const data = await resp.json();
+    const text = data?.choices?.[0]?.message?.content || "";
+    const parsed = extractJSONObject(text);
+    const results = parsed?.results;
+    if (!Array.isArray(results)) throw new Error("OpenRouter mandate: missing results array");
+    return mergeMandateScores(contacts, results);
+  }
+
+  if (!API_KEY) throw new Error("No OPENROUTER_API_KEY or GOOGLE_API_KEY for mandate scoring");
+  const genAI = new GoogleGenerativeAI(API_KEY);
+  const model = genAI.getGenerativeModel({
+    model: MODEL,
+    generationConfig: { temperature: 0.1, maxOutputTokens: 8192 },
+  });
+  const result = await withRetry(() => model.generateContent(prompt), {
+    label: "Gemini mandate score",
+    isRetryable: isGeminiQuotaError,
+    maxAttempts: 4,
+  });
+  const text = result.response.text();
+  const parsed = extractJSONObject(text);
+  const results = parsed?.results;
+  if (!Array.isArray(results)) throw new Error("Gemini mandate: missing results array");
+  return mergeMandateScores(contacts, results);
+}
+
+async function filterContactsByMandate(rows, pageContext, sourceUrl) {
+  if (!rows?.length) return [];
+
+  const elected = [];
+  const rest = [];
+  for (const c of rows) {
+    if (isElectedStudentOrgFastPath(c.title, sourceUrl)) {
+      elected.push({
+        ...c,
+        is_elected_student_role: true,
+        mandate_include: true,
+        mandate_scorer: "elected_student_fast_path",
+        mandate_exclude_reason: null,
+        mandate_externality: 1,
+        mandate_decision_proximity: 0.85,
+        mandate_tier_suggested: c.tier ?? 3,
+      });
+    } else {
+      rest.push(c);
+    }
+  }
+
+  if (rest.length === 0) {
+    console.log(
+      `      ↪ mandate filter: kept ${elected.length} (elected student fast-path), 0 scored`
+    );
+    return elected;
+  }
+
+  const useLlm = shouldUseLlmMandateScorer();
+  let scored = [];
+
+  if (useLlm && (OPENROUTER_API_KEY || API_KEY)) {
+    try {
+      scored = await scoreContactsMandateLLM(rest, pageContext, sourceUrl);
+    } catch (e) {
+      console.warn(`      ⚠ mandate LLM failed, regex fallback: ${String(e?.message || e).slice(0, 140)}`);
+      scored = filterContactsByRegexMandate(rest);
+    }
+  } else {
+    scored = filterContactsByRegexMandate(rest);
+  }
+
+  const keptFromScored = scored.filter((c) => c.mandate_include !== false);
+  let dropped = 0;
+  let dropLog = 0;
+  for (const c of scored) {
+    if (c.mandate_include === false) {
+      dropped++;
+      if (dropLog < 8 && c.mandate_exclude_reason) {
+        console.log(`      ↪ mandate drop: ${c.email || c.name || "?"} — ${c.mandate_exclude_reason}`);
+        dropLog++;
+      }
+    }
+  }
+
+  const out = [...elected, ...keptFromScored];
+  console.log(
+    `      ↪ mandate filter: kept ${out.length} (${elected.length} elected fast-path, ${keptFromScored.length} scored), dropped ${dropped}`
+  );
+  return out;
+}
+
+function extractEmailsFromRawHtml(html) {
+  const stripped = String(html || "").replace(/<script[\s\S]*?<\/script>/gi, " ");
+  const emails = new Set();
+  const re = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
+  let m;
+  while ((m = re.exec(stripped)) !== null) {
+    const e = m[0].toLowerCase();
+    if (e.length < 6 || e.length > 120) continue;
+    emails.add(e);
+  }
+  return [...emails];
+}
+
+function emailLooksLiteral(email, bodyText, mailtos, htmlEmails) {
+  const e = normalizeEmail(email);
+  if (!e || !e.includes("@")) return false;
+  for (const m of mailtos || []) {
+    if (normalizeEmail(m?.email) === e) return true;
+  }
+  if (bodyText && bodyText.toLowerCase().includes(e)) return true;
+  if (htmlEmails && htmlEmails.includes(e)) return true;
+  return false;
+}
+
+async function verifyEmailMx(email) {
+  const domain = email.split("@")[1];
+  if (!domain) return true;
+  try {
+    const mx = await dns.resolveMx(domain);
+    return mx && mx.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function hostnameKey(url) {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+async function resolvePrimaryEduDomain(universityName) {
+  const uni = String(universityName || "").trim();
+  if (!uni) return "";
+  const prompt = `What is the primary public .edu domain for this U.S. university's main campus (the domain used for official sites and email, e.g. unc.edu, berkeley.edu)?
+
+University: ${JSON.stringify(uni)}
+
+Return ONLY JSON: {"domain":"unc.edu"}
+Rules: hostname only, no www, no path. If unknown, {"domain":""}.`;
+
+  const parseDomain = (text) => {
+    const parsed = extractJSONObject(text);
+    const d = normalizeDomainHint(parsed?.domain);
+    if (d && /\.edu/i.test(d)) return d;
+    return "";
+  };
+
+  if (OPENROUTER_API_KEY) {
+    try {
+      const resp = await withTimeout(
+        fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: OPENROUTER_MODEL,
+            temperature: 0,
+            messages: [
+              { role: "system", content: "Return only strict JSON." },
+              { role: "user", content: prompt },
+            ],
+          }),
+        }),
+        14000,
+        "OpenRouter primary domain"
+      );
+      if (resp.ok) {
+        const data = await resp.json();
+        const text = data?.choices?.[0]?.message?.content || "";
+        const d = parseDomain(text);
+        if (d) return d;
+      }
+    } catch {
+      /* empty */
+    }
+  }
+
+  if (!API_KEY) return "";
+  try {
+    const genAI = new GoogleGenerativeAI(API_KEY);
+    const model = genAI.getGenerativeModel({
+      model: MODEL,
+      generationConfig: { temperature: 0, maxOutputTokens: 256 },
+    });
+    const result = await withRetry(() => withTimeout(model.generateContent(prompt), 20000, "Gemini primary domain"), {
+      label: "primary .edu domain",
+      isRetryable: isGeminiQuotaError,
+    });
+    const text = result.response.text();
+    return parseDomain(text);
+  } catch {
+    return "";
+  }
+}
+
+/** Tier-specific phrases for "@domain" and site: searches (people + email in same SERP snippet). */
+function domainAnchoredPhrasesForTier(tier, entrepreneurship) {
+  const ent = (entrepreneurship || "entrepreneurship").trim();
+  const map = {
+    1: [
+      ["director", "student union"],
+      ["commercial", "student union"],
+      ["business development", "union"],
+      ["vendor", "auxiliary"],
+    ],
+    2: [
+      ["director", "student affairs"],
+      ["dean", "students"],
+      ["associate vice president", "student affairs"],
+    ],
+    3: [
+      ["student government", "president"],
+      ["student senate", "email"],
+      ["student body president", ""],
+    ],
+    4: [
+      ["director", ent],
+      ["innovation", "venture"],
+      ["startup", "program"],
+    ],
+    5: [
+      ["director", "multicultural"],
+      ["diversity", "student affairs"],
+    ],
+    6: [
+      ["sustainability", "director"],
+      ["zero waste", "campus"],
+    ],
+    7: [
+      ["food truck", "coordinator"],
+      ["mobile vending", "campus"],
+    ],
+    8: [
+      ["director", "dining"],
+      ["food service", "director"],
+      ["auxiliary", "dining services"],
+    ],
+    9: [
+      ["environmental health", "safety"],
+      ["food safety", "permit"],
+      ["EHS", "director"],
+    ],
+  };
+  return map[tier] || [["director", "staff"]];
+}
+
+function buildDomainAnchoredQueries(shortName, entrepreneurship, tier, officeInfo, domain) {
+  const d = normalizeDomainHint(domain);
+  if (!d) return [];
+  const atDom = `"@${d}"`;
+  const phrases = domainAnchoredPhrasesForTier(tier, entrepreneurship);
+  const names = (officeInfo?.office_names || []).map((x) => String(x || "").trim()).filter(Boolean).slice(0, 4);
+  const seeds = (officeInfo?.seed_queries || []).map((x) => String(x || "").trim()).filter(Boolean).slice(0, 3);
+  const queries = [];
+
+  for (const name of names) {
+    queries.push({ tier, phrase: name, query: `${name} email ${atDom}` });
+    queries.push({ tier, phrase: name, query: `site:${d} "${name}" staff email` });
+    queries.push({ tier, phrase: name, query: `site:${d} "${name}" directory` });
+  }
+  for (const sq of seeds) {
+    if (/site:|@/.test(sq)) queries.push({ tier, phrase: "seed", query: sq });
+    else queries.push({ tier, phrase: "seed", query: `${sq} ${atDom}` });
+  }
+  for (const [a, b] of phrases) {
+    const p1 = String(a || "").trim();
+    const p2 = String(b || "").trim();
+    if (p1 && p2) {
+      queries.push({ tier, phrase: `${p1} ${p2}`, query: `"${p1}" "${p2}" ${atDom}` });
+      queries.push({ tier, phrase: `${p1} ${p2}`, query: `site:${d} "${p1}" "${p2}" email` });
+    } else if (p1) {
+      queries.push({ tier, phrase: p1, query: `"${p1}" ${atDom}` });
+      queries.push({ tier, phrase: p1, query: `site:${d} "${p1}" email` });
+    }
+  }
+  const uniq = [];
+  const seen = new Set();
+  for (const q of queries) {
+    const k = q.query;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    uniq.push(q);
+  }
+  return uniq.slice(0, 14);
 }
 
 function atomicWriteJson(targetPath, value) {
@@ -505,47 +1121,77 @@ function pickCrawlSeeds(firstTierByUrl, tiers, markers, perTier) {
   return seeds;
 }
 
-/** Open a search-result landing page and collect same-site People / About / Directory links. */
+/** Breadth-first crawl: hub → staff/people links → deeper directory pages (depth from CRAWL_PEOPLE_DEPTH). */
 async function crawlPeopleLinksFromUrl(browser, startUrl, markers, maxLinks) {
-  const page = await browser.newPage({
-    userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-  });
-  try {
-    await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
-    await sleep(600);
-    const raw = await page.evaluate(() => {
-      const patterns =
-        /people|about|staff|directory|team|contact|leadership|officers|board|faculty|our-team|who we are|meet/i;
-      const out = [];
-      const seen = new Set();
-      document.querySelectorAll("a[href]").forEach((a) => {
-        let href = a.getAttribute("href");
-        if (!href || href.startsWith("mailto:") || href.startsWith("tel:") || href.startsWith("javascript:"))
-          return;
-        let abs;
-        try {
-          abs = new URL(href, location.href).href;
-        } catch {
-          return;
-        }
-        const t = ((a.textContent || "") + " " + abs).toLowerCase();
-        if (!patterns.test(t)) return;
-        if (seen.has(abs)) return;
-        seen.add(abs);
-        out.push(abs);
-      });
-      return out;
+  const maxDepth = CRAWL_PEOPLE_DEPTH;
+  const pageBudget = CRAWL_PEOPLE_MAX_PAGES;
+  const ua =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+  const collect = () => {
+    const patterns =
+      /people|about|staff|directory|team|contact|leadership|officers|board|faculty|our-team|who we are|meet|bios/i;
+    const out = [];
+    const seen = new Set();
+    document.querySelectorAll("a[href]").forEach((a) => {
+      let href = a.getAttribute("href");
+      if (!href || href.startsWith("mailto:") || href.startsWith("tel:") || href.startsWith("javascript:"))
+        return;
+      let abs;
+      try {
+        abs = new URL(href, location.href).href;
+      } catch {
+        return;
+      }
+      const t = ((a.textContent || "") + " " + abs).toLowerCase();
+      if (!patterns.test(t)) return;
+      if (seen.has(abs)) return;
+      seen.add(abs);
+      out.push(abs);
     });
-    const deduped = dedupeUrls(raw);
-    const scoped = markers?.length ? deduped.filter((u) => urlMatchesUniversity(u, markers)) : deduped;
-    return scoped.slice(0, maxLinks);
+    return out;
+  };
+
+  const visited = new Set();
+  const out = [];
+  let frontier = [{ url: startUrl, d: 0 }];
+
+  try {
+    while (frontier.length && out.length < maxLinks && visited.size < pageBudget) {
+      const nextFront = [];
+      for (const { url, d } of frontier) {
+        if (visited.has(url)) continue;
+        visited.add(url);
+        const page = await browser.newPage({ userAgent: ua });
+        try {
+          await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+          await sleep(450);
+          const raw = await page.evaluate(collect);
+          const deduped = dedupeUrls(raw);
+          const scoped = markers?.length ? deduped.filter((u) => urlMatchesUniversity(u, markers)) : deduped;
+          for (const u of scoped) {
+            if (out.length < maxLinks && !out.includes(u)) out.push(u);
+          }
+          if (d < maxDepth) {
+            for (const u of scoped.slice(0, 16)) {
+              if (!visited.has(u) && !nextFront.some((x) => x.url === u)) {
+                nextFront.push({ url: u, d: d + 1 });
+              }
+            }
+          }
+        } catch (e) {
+          console.log(`      ↪ people crawl: ${String(e?.message || e).slice(0, 100)}`);
+        } finally {
+          await page.close();
+        }
+        if (visited.size >= pageBudget) break;
+      }
+      frontier = nextFront;
+    }
   } catch (e) {
     console.log(`      ↪ people crawl: ${String(e?.message || e).slice(0, 100)}`);
-    return [];
-  } finally {
-    await page.close();
   }
+  return out.slice(0, maxLinks);
 }
 
 async function discoverUrls(browser, universityName, entrepreneurship, maxPages, opts) {
@@ -560,6 +1206,10 @@ async function discoverUrls(browser, universityName, entrepreneurship, maxPages,
   const tiers = normalizeTiers(opts.tiers);
   const tierAliases = await resolveTierTerminology({ universityName, entrepreneurship, tiers });
   const markers = universityMarkers(universityName);
+  const primaryDomain = normalizeDomainHint(opts.primaryDomain || "");
+  if (primaryDomain) {
+    console.log(`  Primary .edu domain (search anchor): ${primaryDomain}`);
+  }
   const crawlPerTier = Math.min(3, Math.max(1, parseInt(process.env.CRAWL_SEEDS_PER_TIER || "2", 10) || 2));
   const crawlMaxLinks = Math.min(12, Math.max(4, parseInt(process.env.CRAWL_MAX_LINKS || "10", 10) || 10));
 
@@ -584,10 +1234,16 @@ async function discoverUrls(browser, universityName, entrepreneurship, maxPages,
       } else {
         console.log(`    → offices: (fallback to generic category queries)`);
       }
-      queries.push(...buildQueriesForTierWithOffices(universityName, entrepreneurship, t, tierAliases, office));
+      const od = normalizeDomainHint(office?.primary_domain_hint);
+      if (od && od !== primaryDomain) {
+        console.log(`    → office domain hint: ${od}`);
+      }
+      queries.push(
+        ...buildQueriesForTierWithOffices(universityName, entrepreneurship, t, tierAliases, office, primaryDomain)
+      );
     }
   } else {
-    queries = buildTierQueries(universityName, entrepreneurship, tiers, tierAliases);
+    queries = buildTierQueries(universityName, entrepreneurship, tiers, tierAliases, primaryDomain);
   }
 
   const interSearchDelay = Math.min(opts.delayMs, 3500);
@@ -730,16 +1386,61 @@ async function fetchPage(browser, url) {
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   });
   try {
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
-    await sleep(600);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
+        break;
+      } catch (e) {
+        if (attempt === 3) throw e;
+        await sleep(700 * attempt);
+      }
+    }
+    await sleep(450);
+    await page.evaluate(() => {
+      try {
+        document.querySelectorAll("[data-email], [data-user], [data-domain]").forEach((el) => {
+          const full = (el.dataset.email || "").trim();
+          if (full.includes("@")) {
+            const t = el.textContent || "";
+            if (!t.includes("@")) el.textContent = full;
+            return;
+          }
+          const user = (el.dataset.user || "").trim();
+          const domain = (el.dataset.domain || "").trim();
+          if (user && domain && !user.includes("@")) {
+            const combined = `${user}@${domain}`;
+            const t = el.textContent || "";
+            if (!t.includes("@")) el.textContent = combined;
+          }
+        });
+      } catch {
+        /* empty */
+      }
+      try {
+        if (document.body?.innerHTML) {
+          document.body.innerHTML = document.body.innerHTML
+            .replace(/\[at\]/gi, "@")
+            .replace(/\(at\)/gi, "@")
+            .replace(/\[dot\]/gi, ".")
+            .replace(/\(dot\)/gi, ".");
+        }
+      } catch {
+        /* empty */
+      }
+    });
+    await page.waitForSelector("a[href^='mailto:']", { timeout: 2000 }).catch(() => {});
     const title = await page.title();
     const bodyText = await page.innerText("body");
+    const rawHtml = await page.content();
     const mailtos = await extractMailtos(page);
+    const htmlEmails = extractEmailsFromRawHtml(rawHtml);
     return {
       finalUrl: page.url(),
       title,
       bodyText: bodyText.slice(0, 100000),
+      rawHtml: rawHtml.slice(0, 400000),
       mailtos,
+      htmlEmails,
     };
   } finally {
     await page.close();
@@ -781,6 +1482,8 @@ function isGeminiQuotaError(msg) {
 }
 
 function inferTierFromUrl(url) {
+  const c = classifyUrlTier(url);
+  if (c != null) return c;
   const s = String(url || "").toLowerCase();
   if (/dining|food|meal|auxiliary/.test(s)) return 8;
   if (/studentaffairs|students|student-life|studentlife/.test(s)) return 2;
@@ -791,7 +1494,7 @@ function inferTierFromUrl(url) {
 }
 
 function mailtoFallbackContacts({ mailtos, university, sourceUrl }) {
-  const tier = inferTierFromUrl(sourceUrl);
+  const tier = classifyUrlTier(sourceUrl) ?? inferTierFromUrl(sourceUrl);
   const out = [];
   for (const m of mailtos || []) {
     const email = String(m?.email || "")
@@ -813,7 +1516,7 @@ function mailtoFallbackContacts({ mailtos, university, sourceUrl }) {
 }
 
 async function resolveUniversityWithGemini(u) {
-  if (!API_KEY || geminiSkipUniversityResolve) return null;
+  if (!API_KEY) return null;
   const genAI = new GoogleGenerativeAI(API_KEY);
   const model = genAI.getGenerativeModel({
     model: MODEL,
@@ -851,21 +1554,15 @@ Rules:
 
   let text;
   try {
-    const result = await model.generateContent(prompt);
+    const result = await withRetry(() => model.generateContent(prompt), {
+      label: "Gemini university resolve",
+      isRetryable: isGeminiQuotaError,
+      maxAttempts: 4,
+    });
     text = result.response.text();
   } catch (e) {
     const msg = String(e?.message || e);
-    if (isGeminiQuotaError(msg)) {
-      geminiSkipUniversityResolve = true;
-      console.warn(
-        "  ⚠ Gemini quota / rate limit — AI university rename disabled for the rest of this run. " +
-          "Search still runs using your school names as entered. " +
-          "For higher limits enable billing in Google AI Studio or wait and retry: " +
-          "https://ai.google.dev/gemini-api/docs/rate-limits"
-      );
-      return null;
-    }
-    console.warn(`  ⚠ Gemini university resolve failed: ${msg.slice(0, 280)}`);
+    console.warn(`  ⚠ Gemini university resolve failed after retries: ${msg.slice(0, 280)}`);
     return null;
   }
 
@@ -1020,20 +1717,22 @@ Rules:
     }
   }
 
-  if (!API_KEY || geminiSkipUniversityResolve) return {};
+  if (!API_KEY) return {};
   try {
     const genAI = new GoogleGenerativeAI(API_KEY);
     const model = genAI.getGenerativeModel({
       model: MODEL,
       generationConfig: { temperature: 0.1, maxOutputTokens: 512 },
     });
-    const result = await withTimeout(model.generateContent(prompt), 14000, "Gemini search terminology");
+    const result = await withRetry(
+      () => withTimeout(model.generateContent(prompt), 14000, "Gemini search terminology"),
+      { label: "Gemini search terminology", isRetryable: isGeminiQuotaError }
+    );
     const text = result?.response?.text?.() || "";
     const parsed = extractJSONObject(text);
     if (parsed && typeof parsed === "object") return parsed;
-  } catch (e) {
-    const msg = String(e?.message || e);
-    if (isGeminiQuotaError(msg)) geminiSkipUniversityResolve = true;
+  } catch {
+    /* empty */
   }
   return {};
 }
@@ -1094,44 +1793,64 @@ Rules:
     }
   }
 
-  if (!API_KEY || geminiSkipUniversityResolve) return null;
+  if (!API_KEY) return null;
   try {
     const genAI = new GoogleGenerativeAI(API_KEY);
     const model = genAI.getGenerativeModel({
       model: MODEL,
       generationConfig: { temperature: 0.15, maxOutputTokens: 700 },
     });
-    const result = await withTimeout(model.generateContent(prompt), 16000, "Gemini campus office resolve");
+    const result = await withRetry(
+      () => withTimeout(model.generateContent(prompt), 16000, "Gemini campus office resolve"),
+      { label: "Gemini campus office resolve", isRetryable: isGeminiQuotaError }
+    );
     const text = result?.response?.text?.() || "";
     const parsed = extractJSONObject(text);
     if (parsed && Array.isArray(parsed.office_names)) return parsed;
-  } catch (e) {
-    const msg = String(e?.message || e);
-    if (isGeminiQuotaError(msg)) geminiSkipUniversityResolve = true;
+  } catch {
+    /* empty */
   }
   return null;
 }
 
-async function geminiExtract({ university, sourceUrl, pageTitle, bodyText, mailtos, tierFocus }) {
-  if (geminiSkipExtract) {
-    return mailtoFallbackContacts({ mailtos, university, sourceUrl });
+async function geminiExtract({
+  university,
+  sourceUrl,
+  pageTitle,
+  bodyText,
+  mailtos,
+  htmlEmails = [],
+  tierFocus,
+  urlTierClass,
+}) {
+  if (LLM_PROVIDER !== "openrouter" && !API_KEY) {
+    throw new Error("Set GOOGLE_API_KEY (or GEMINI_API_KEY) from https://aistudio.google.com/apikey");
   }
-  if (!API_KEY) throw new Error("Set GOOGLE_API_KEY (or GEMINI_API_KEY) from https://aistudio.google.com/apikey");
-  const genAI = new GoogleGenerativeAI(API_KEY);
-  const model = genAI.getGenerativeModel({
-    model: MODEL,
-    generationConfig: {
-      temperature: 0.2,
-      maxOutputTokens: 8192,
-    },
-  });
+  const genAI = API_KEY ? new GoogleGenerativeAI(API_KEY) : null;
+  const model = genAI
+    ? genAI.getGenerativeModel({
+        model: MODEL,
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 8192,
+        },
+      })
+    : null;
 
   const tierHint =
     tierFocus && tierFocus.length
       ? `
-Outreach tier focus for this page (prefer roles that match these tiers when assigning tier numbers):
+Outreach tier focus for this run (categories you may search for):
 ${tierFocus.map((t) => `T${t}`).join(", ")}
 T1=student union commercial, T2=student life, T3=student gov, T4=entrepreneurship, T5=cultural/SA, T6=sustainability, T7=food truck/mobile, T8=dining, T9=EHS/food safety
+`
+      : "";
+
+  const urlTierBlock =
+    urlTierClass != null && urlTierClass >= 1 && urlTierClass <= 9
+      ? `
+URL / site structure (authoritative — use tier ${urlTierClass} unless a person's title clearly belongs to a different campus unit):
+The page URL and path strongly suggest outreach tier T${urlTierClass}. Assign tier ${urlTierClass} to contacts unless their role clearly belongs to a different department.
 `
       : "";
 
@@ -1140,9 +1859,13 @@ T1=student union commercial, T2=student life, T3=student gov, T4=entrepreneurshi
 Context university (may be empty): ${university || "unknown"}
 Source URL: ${sourceUrl}
 Page title: ${pageTitle}
+${urlTierBlock}
 ${tierHint}
 Known mailto links found on the page (use these emails when they match a person — prefer factual emails over guessing):
 ${JSON.stringify(mailtos, null, 2)}
+
+Emails also detected in HTML / attributes (may overlap mailto):
+${JSON.stringify((htmlEmails || []).slice(0, 80), null, 2)}
 
 Page text (truncated):
 ---
@@ -1153,42 +1876,56 @@ Return ONLY a valid JSON array (no markdown, no commentary). Each item:
 {
   "name": "string or null",
   "title": "string or null",
-  "email": "string — must appear in page text or mailto list when possible",
-  "tier": integer 1-9 optional (1=student union commercial, 4=entrepreneurship, 8=dining, 9=EHS, etc.),
+  "email": "string — must appear in page text, HTML-detected list, or mailto list",
+  "tier": integer 1-9 optional,
   "confidence": "high" | "medium" | "low",
   "source_url": "${sourceUrl}"
 }
 
 Rules:
-- Only include contacts with a plausible email for that person (from mailto or clearly listed on page).
-- Do not fabricate emails.
+- Only include contacts whose email appears in the page text, mailto list, or HTML-detected emails above (or is clearly obfuscated there as plain text).
+- Do not invent or guess emails from naming patterns alone.
 - If no good contacts, return []`;
 
   async function openRouterExtract() {
     if (!OPENROUTER_API_KEY) return null;
-    const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: OPENROUTER_MODEL,
-        temperature: 0.2,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You extract contact records from university web text. Return only valid JSON arrays, never markdown.",
+    const resp = await withRetry(
+      async () => {
+        const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+            "Content-Type": "application/json",
           },
-          { role: "user", content: prompt },
-        ],
-      }),
-    });
-    if (!resp.ok) {
-      const t = await resp.text().catch(() => "");
-      throw new Error(`OpenRouter ${resp.status}: ${t.slice(0, 220)}`);
-    }
+          body: JSON.stringify({
+            model: OPENROUTER_MODEL,
+            temperature: 0.2,
+            messages: [
+              {
+                role: "system",
+                content:
+                  "You extract contact records from university web text. Return only valid JSON arrays, never markdown.",
+              },
+              { role: "user", content: prompt },
+            ],
+          }),
+        });
+        if (r.status === 429 || r.status === 503) {
+          const t = await r.text().catch(() => "");
+          throw new Error(`OpenRouter ${r.status}: ${t.slice(0, 120)}`);
+        }
+        if (!r.ok) {
+          const t = await r.text().catch(() => "");
+          throw new Error(`OpenRouter ${r.status}: ${t.slice(0, 220)}`);
+        }
+        return r;
+      },
+      {
+        label: "OpenRouter extract",
+        maxAttempts: 4,
+        isRetryable: (msg) => /429|503|Too Many|rate|quota/i.test(String(msg)),
+      }
+    );
     const data = await resp.json();
     const text = data?.choices?.[0]?.message?.content || "";
     const parsed = extractJSON(text);
@@ -1207,27 +1944,24 @@ Rules:
 
   let text;
   try {
-    const result = await model.generateContent(prompt);
+    const result = await withRetry(() => model.generateContent(prompt), {
+      label: "Gemini extract",
+      isRetryable: isGeminiQuotaError,
+      maxAttempts: 4,
+    });
     text = result.response.text();
   } catch (e) {
     const msg = String(e?.message || e);
-    if (isGeminiQuotaError(msg)) {
-      geminiSkipExtract = true;
-      console.warn(
-        "      ⚠ Gemini quota / rate limit."
-      );
-      if (OPENROUTER_API_KEY) {
-        try {
-          console.log(`      ↪ trying OpenRouter fallback model ${OPENROUTER_MODEL}`);
-          return (await openRouterExtract()) || mailtoFallbackContacts({ mailtos, university, sourceUrl });
-        } catch (orErr) {
-          console.warn(`      ⚠ OpenRouter fallback failed: ${String(orErr.message || orErr)}`);
-        }
+    if (OPENROUTER_API_KEY) {
+      try {
+        console.warn(`      ⚠ Gemini extract failed (${msg.slice(0, 120)}); trying OpenRouter…`);
+        return (await openRouterExtract()) || mailtoFallbackContacts({ mailtos, university, sourceUrl });
+      } catch (orErr) {
+        console.warn(`      ⚠ OpenRouter fallback failed: ${String(orErr.message || orErr)}`);
       }
-      console.warn("      ↪ switching to mailto-only fallback extraction for the rest of this run.");
-      return mailtoFallbackContacts({ mailtos, university, sourceUrl });
     }
-    throw e;
+    console.warn(`      ↪ mailto-only fallback: ${msg.slice(0, 120)}`);
+    return mailtoFallbackContacts({ mailtos, university, sourceUrl });
   }
   const parsed = extractJSON(text);
   if (!Array.isArray(parsed)) {
@@ -1256,66 +1990,23 @@ function normalizeEmail(s) {
   return String(s || "").trim().toLowerCase();
 }
 
-function isContactRelevantByKeywords(text) {
-  const t = String(text || "").toLowerCase();
-  if (!t) return false;
-  return /student|union|dining|auxiliar|entrepreneur|innovation|incubat|startup|government|affairs|life|multicultural|sustainab|food|vendor|ehs|health|safety|permit|campus|university|college|director|coordinator|dean|vp|vice president|manager/.test(
-    t
-  );
-}
+async function processUrls(browser, urls, universityLabel, allContacts, allInferred, tierFocus, ctx) {
+  const seenEmails = ctx.seenEmails;
+  const subdomainCounts = ctx.subdomainCounts;
+  const cap = SUBDOMAIN_CONTACT_CAP;
 
-async function fetchSearchSnippet(query) {
-  const enc = encodeURIComponent(query);
-  const resp = await withTimeout(
-    fetch(`https://www.bing.com/search?q=${enc}&count=5`),
-    10000,
-    "Bing verify search"
-  );
-  if (!resp.ok) return "";
-  const html = await resp.text();
-  const text = html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return text.slice(0, 5000);
-}
-
-async function verifyContactsRelevance(rows, universityName) {
-  const uni = String(universityName || "").trim();
-  const out = [];
-  let kept = 0;
-  let dropped = 0;
-  for (const c of rows || []) {
-    const email = normalizeEmail(c.email);
-    if (!email || !email.includes("@")) continue;
-    const localEvidence = [c.name, c.title, c.department, c.tier_label, c.source_url, c.university]
-      .filter(Boolean)
-      .join(" ");
-    let relevant = isContactRelevantByKeywords(localEvidence);
-    if (!relevant) {
-      try {
-        const snippet = await fetchSearchSnippet(`${email} ${uni} university`);
-        relevant = isContactRelevantByKeywords(snippet);
-      } catch {
-        // Keep on lookup failure so we don't accidentally drop legitimate contacts.
-        relevant = true;
-      }
-    }
-    if (relevant) {
-      kept++;
-      out.push(c);
-    } else {
-      dropped++;
-    }
-  }
-  console.log(`      ↪ relevance filter: kept ${kept}, dropped ${dropped}`);
-  return out;
-}
-
-async function processUrls(browser, urls, universityLabel, allContacts, tierFocus) {
   for (const url of urls) {
+    let host = "";
+    try {
+      host = hostnameKey(url);
+    } catch {
+      host = "";
+    }
+    if (host && (subdomainCounts.get(host) || 0) >= cap) {
+      console.log(`    ↪ skip (subdomain contact cap ${cap}): ${url}`);
+      continue;
+    }
+
     console.log(`    → ${url}`);
     let snap;
     try {
@@ -1324,7 +2015,27 @@ async function processUrls(browser, urls, universityLabel, allContacts, tierFocu
       console.error(`      ✗ Page failed: ${e.message}`);
       continue;
     }
-    console.log(`      ✓ ${snap.title?.slice(0, 70) || "(no title)"} · mailto: ${snap.mailtos.length}`);
+
+    const mailtoEmails = (snap.mailtos || []).map((m) => normalizeEmail(m.email)).filter(Boolean);
+    const htmlSet = snap.htmlEmails || [];
+    const candidates = new Set([...mailtoEmails, ...htmlSet]);
+    const allVisibleSeen =
+      candidates.size > 0 && [...candidates].every((e) => e && seenEmails.has(e));
+    if (allVisibleSeen) {
+      console.log(`      ↪ skip LLM (all visible emails already in run)`);
+      continue;
+    }
+
+    const urlClass = classifyUrlTier(snap.finalUrl);
+    const inferredNum = inferTierFromUrl(snap.finalUrl);
+    let urlTier = urlClass;
+    if (urlTier == null) {
+      urlTier = inferredNum > 0 ? inferredNum : tierFocus?.[0] ?? null;
+    }
+
+    console.log(
+      `      ✓ ${snap.title?.slice(0, 70) || "(no title)"} · mailto: ${snap.mailtos.length} · html emails: ${htmlSet.length}`
+    );
 
     let contacts;
     try {
@@ -1334,24 +2045,62 @@ async function processUrls(browser, urls, universityLabel, allContacts, tierFocu
         pageTitle: snap.title,
         bodyText: snap.bodyText,
         mailtos: snap.mailtos,
+        htmlEmails: htmlSet,
         tierFocus,
+        urlTierClass: urlClass ?? undefined,
       });
     } catch (e) {
-      console.error(`      ✗ Gemini: ${e.message}`);
+      console.error(`      ✗ Extraction: ${e.message}`);
       continue;
     }
-    if (geminiSkipExtract) {
-      console.log(`      ↪ fallback mode: using mailto-only extraction (${contacts.length} contact(s))`);
+
+    const withMeta = (contacts || []).map((c) => {
+      const email = normalizeEmail(c.email);
+      const literal = emailLooksLiteral(email, snap.bodyText, snap.mailtos, htmlSet);
+      const tierNum = urlTier != null ? urlTier : c.tier;
+      return {
+        ...c,
+        email,
+        tier: tierNum,
+        university: universityLabel,
+        tier_label: tierNum ? `Tier ${tierNum}` : null,
+        evidence: literal ? "literal" : "inferred",
+      };
+    });
+
+    const titleFiltered = await filterContactsByMandate(withMeta, snap.bodyText, snap.finalUrl);
+    const routed = titleFiltered.map((row) => {
+      const t = row.mandate_tier_suggested != null ? row.mandate_tier_suggested : row.tier;
+      return { ...row, tier: t, tier_label: t != null ? `Tier ${t}` : null };
+    });
+    let addedConfirmed = 0;
+    let addedInferred = 0;
+
+    for (const row of routed) {
+      if (!row.email || !row.email.includes("@")) continue;
+      if (seenEmails.has(row.email)) continue;
+
+      if (VERIFY_MX) {
+        const ok = await verifyEmailMx(row.email);
+        if (!ok) {
+          console.log(`      ↪ drop (no MX for domain): ${row.email}`);
+          continue;
+        }
+      }
+
+      const h = hostnameKey(row.source_url || snap.finalUrl);
+      if (row.evidence === "inferred") {
+        allInferred.push(row);
+        addedInferred++;
+      } else {
+        allContacts.push(row);
+        addedConfirmed++;
+      }
+      seenEmails.add(row.email);
+      if (h) subdomainCounts.set(h, (subdomainCounts.get(h) || 0) + 1);
     }
 
-    const withMeta = contacts.map((c) => ({
-      ...c,
-      university: universityLabel,
-      tier_label: c.tier ? `Tier ${c.tier}` : null,
-    }));
-    const relevant = await verifyContactsRelevance(withMeta, universityLabel);
-    allContacts.push(...relevant);
-    console.log(`      ✓ +${relevant.length} relevant contact(s)`);
+    console.log(`      ✓ +${addedConfirmed} confirmed · +${addedInferred} inferred (review file)`);
   }
 }
 
@@ -1364,6 +2113,7 @@ async function runBatch(opts) {
   if (Number.isFinite(opts.max) && opts.max > 0) list = list.slice(0, opts.max);
 
   fs.mkdirSync(path.dirname(opts.out) || ".", { recursive: true });
+  fs.mkdirSync(path.dirname(opts.inferredOut) || ".", { recursive: true });
 
   const tierList = normalizeTiers(opts.tiers);
   const batchOpts = { ...opts, tiers: tierList };
@@ -1374,10 +2124,14 @@ async function runBatch(opts) {
     `Canonical university names (OpenRouter): ${CANONICAL_UNIVERSITY_NAMES && OPENROUTER_API_KEY ? "on" : CANONICAL_UNIVERSITY_NAMES ? "off (add OPENROUTER_API_KEY)" : "off (set CANONICAL_UNIVERSITY_NAMES=0 to disable)"}`
   );
   console.log(
-    `AI university name expansion (Gemini): ${batchOpts.resolveUniversity ? "on (extra Gemini call per school)" : "off (set GEMINI_RESOLVE_UNIVERSITY=1 or --resolve-university to enable)"}\n`
+    `AI university name expansion (Gemini): ${batchOpts.resolveUniversity ? "on (extra Gemini call per school)" : "off (set GEMINI_RESOLVE_UNIVERSITY=1 or --resolve-university to enable)"}`
   );
+  console.log(`Domain-anchored @.edu search: ${DOMAIN_ANCHORED_SEARCH ? "on (DOMAIN_ANCHORED_SEARCH=0 to disable)" : "off"}`);
+  console.log(`DNS MX check (drop bad domains): ${VERIFY_MX ? "on" : "off (VERIFY_MX=1)"}`);
+  console.log(`People crawl: depth ${CRAWL_PEOPLE_DEPTH}, max ${CRAWL_PEOPLE_MAX_PAGES} page(s); subdomain cap ${SUBDOMAIN_CONTACT_CAP} contact(s)/host\n`);
 
   let all = [];
+  let allInferred = [];
   if (opts.start > 0 && fs.existsSync(opts.out)) {
     try {
       all = JSON.parse(fs.readFileSync(opts.out, "utf8"));
@@ -1386,6 +2140,26 @@ async function runBatch(opts) {
     } catch {
       all = [];
     }
+  }
+  if (opts.start > 0 && fs.existsSync(opts.inferredOut)) {
+    try {
+      allInferred = JSON.parse(fs.readFileSync(opts.inferredOut, "utf8"));
+      if (!Array.isArray(allInferred)) allInferred = [];
+      console.log(`Resuming: loaded ${allInferred.length} inferred → ${opts.inferredOut}\n`);
+    } catch {
+      allInferred = [];
+    }
+  }
+
+  const seenEmails = new Set();
+  const subdomainCounts = new Map();
+  for (const c of all) {
+    const e = normalizeEmail(c.email);
+    if (e) seenEmails.add(e);
+  }
+  for (const c of allInferred) {
+    const e = normalizeEmail(c.email);
+    if (e) seenEmails.add(e);
   }
 
   const browser = await chromium.launch(chromiumLaunchOptions());
@@ -1425,9 +2199,20 @@ async function runBatch(opts) {
         );
       }
 
+      let primaryDomain = "";
+      try {
+        primaryDomain = await resolvePrimaryEduDomain(displayName);
+        if (primaryDomain) console.log(`  → Primary .edu domain: ${primaryDomain}`);
+      } catch (e) {
+        console.log(`  (primary .edu domain lookup failed: ${String(e?.message || e).slice(0, 100)})`);
+      }
+
       let urls = [];
       try {
-        urls = await discoverUrls(browser, searchName, entForSearch, opts.pagesPerSchool, batchOpts);
+        urls = await discoverUrls(browser, searchName, entForSearch, opts.pagesPerSchool, {
+          ...batchOpts,
+          primaryDomain,
+        });
       } catch (e) {
         console.error(`  ✗ Search failed: ${e.message}`);
       }
@@ -1436,12 +2221,17 @@ async function runBatch(opts) {
         console.log("  (no result URLs — try again later or increase searches)");
       } else {
         console.log(`  Found ${urls.length} page(s) to scrape`);
-        await processUrls(browser, urls, displayName, all, tierList);
+        await processUrls(browser, urls, displayName, all, allInferred, tierList, {
+          seenEmails,
+          subdomainCounts,
+        });
       }
 
       const deduped = dedupeContactsByEmail(all);
+      const dedupInf = dedupeContactsByEmail(allInferred);
       atomicWriteJson(opts.out, deduped);
-      console.log(`  💾 saved ${deduped.length} unique emails → ${opts.out}`);
+      atomicWriteJson(opts.inferredOut, dedupInf);
+      console.log(`  💾 ${deduped.length} confirmed → ${opts.out}; ${dedupInf.length} inferred → ${opts.inferredOut}`);
 
       await sleep(opts.delayMs);
     }
@@ -1450,21 +2240,31 @@ async function runBatch(opts) {
   }
 
   const final = dedupeContactsByEmail(all);
+  const finalInf = dedupeContactsByEmail(allInferred);
   atomicWriteJson(opts.out, final);
-  console.log(`\n✅ Done. ${final.length} unique contacts → ${opts.out}`);
+  atomicWriteJson(opts.inferredOut, finalInf);
+  console.log(`\n✅ Done. ${final.length} confirmed → ${opts.out}; ${finalInf.length} inferred → ${opts.inferredOut}`);
 }
 
 async function runSingle(opts) {
   fs.mkdirSync(path.dirname(opts.out) || ".", { recursive: true });
+  fs.mkdirSync(path.dirname(opts.inferredOut) || ".", { recursive: true });
   const browser = await chromium.launch(chromiumLaunchOptions());
   const all = [];
+  const allInferred = [];
+  const seenEmails = new Set();
+  const subdomainCounts = new Map();
   try {
-    await processUrls(browser, opts.urls, opts.university || "", all, normalizeTiers(opts.tiers));
+    await processUrls(browser, opts.urls, opts.university || "", all, allInferred, normalizeTiers(opts.tiers), {
+      seenEmails,
+      subdomainCounts,
+    });
   } finally {
     await browser.close();
   }
-  atomicWriteJson(opts.out, all);
-  console.log(`\nWrote ${all.length} contacts → ${opts.out}`);
+  atomicWriteJson(opts.out, dedupeContactsByEmail(all));
+  atomicWriteJson(opts.inferredOut, dedupeContactsByEmail(allInferred));
+  console.log(`\nWrote ${all.length} confirmed → ${opts.out}; ${allInferred.length} inferred → ${opts.inferredOut}`);
 }
 
 async function main() {
@@ -1489,7 +2289,9 @@ Usage — you do NOT need to paste URLs per school for batch runs.
 
   Options:
     --data PATH              default data/universities.json
-    --out PATH               default output/gemini_contacts.json
+    --out PATH               default output/gemini_contacts.json (literal-email / higher-trust rows)
+    --inferred-out PATH      default output/inferred_contacts.json (LLM-only email evidence)
+    CONTACT_SCORER=regex|llm|auto   post-extract mandate filter (default auto)
     --tiers 1,2,5            which T1–T9 search templates to run (default ${DEFAULT_TIERS.join(",")})
     --max N                  only first N schools (after --start)
     --start N                skip first N schools (resume)
