@@ -572,8 +572,6 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
       chat.scrollTop = chat.scrollHeight;
     }
 
-    addMsg("bot", "<p>Hi — I’m the outreach runner. Configure schools and tiers below, then <strong>Send & run</strong>. I’ll search the web, open campus pages, and extract contacts with Gemini.</p>");
-
     async function refreshStatus() {
       try {
         const r = await fetch("/api/status");
