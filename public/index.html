@@ -154,50 +154,12 @@
     }
     header nav a:hover { color: var(--text); border-color: rgba(255,124,56,0.35); }
 
-    .chat-scroll {
+    .request-body {
       flex: 1;
       overflow-y: auto;
-      padding: 0.5rem 0 1rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.85rem;
+      padding-top: 0.6rem;
+      min-height: 0;
     }
-
-    .msg {
-      max-width: 92%;
-      padding: 0.85rem 1rem;
-      border-radius: var(--radius);
-      font-size: 0.88rem;
-      line-height: 1.45;
-      border: 1px solid var(--glass-border);
-      backdrop-filter: blur(var(--glass-blur));
-      -webkit-backdrop-filter: blur(var(--glass-blur));
-      box-shadow: var(--glass-inset);
-      animation: pop 0.35s ease;
-    }
-    @keyframes pop {
-      from { opacity: 0; transform: translateY(6px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    .msg.user {
-      align-self: flex-end;
-      background: var(--glass-accent);
-      border-color: rgba(255, 124, 56, 0.35);
-    }
-    .msg.bot {
-      align-self: flex-start;
-      background: var(--glass-surface);
-    }
-    .msg.bot .label {
-      font-size: 0.62rem;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: var(--accent);
-      margin-bottom: 0.45rem;
-      font-weight: 600;
-    }
-    .msg p { margin-bottom: 0.5rem; }
-    .msg p:last-child { margin-bottom: 0; }
 
     .panel {
       border-radius: var(--radius);
@@ -525,12 +487,10 @@
 
     <div class="workspace">
       <section class="request-pane">
-        <div class="chat-scroll" id="chat"></div>
-
-        <div class="composer">
-          <div class="composer-inner panel">
-            <div class="msg bot" style="margin-bottom:0.75rem;border:none;background:transparent;padding:0;backdrop-filter:none;">
-              <div class="label">Configure run</div>
+        <div class="request-body">
+          <div class="composer">
+            <div class="composer-inner panel">
+              <div style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--accent);margin-bottom:0.45rem;font-weight:600;">Configure run</div>
               <p style="font-size:0.8rem;color:var(--muted);margin-bottom:0.75rem;">
                 Paste <strong>one school per line</strong>, or CSV: <code style="color:var(--accent);">name, city, entrepreneurship center</code>.
                 Be specific with names (e.g. campus or city) to improve search. Optional: set <code style="color:var(--accent);">GEMINI_RESOLVE_UNIVERSITY=1</code> on the server for extra AI name expansion (uses more API quota). Tick <strong>tiers</strong>, then send.
@@ -616,19 +576,6 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
         <span><strong>T${n}</strong> — ${title}<br/><span style="opacity:0.75">${sub}</span></span>`;
       grid.appendChild(lab);
     });
-
-    const chat = document.getElementById("chat");
-
-    function addMsg(role, html) {
-      const el = document.createElement("div");
-      el.className = "msg " + (role === "user" ? "user" : "bot");
-      if (role === "bot") el.innerHTML = '<div class="label">Assistant</div>';
-      const inner = document.createElement("div");
-      inner.innerHTML = html;
-      el.appendChild(inner);
-      chat.appendChild(el);
-      chat.scrollTop = chat.scrollHeight;
-    }
 
     let lastLogLines = [];
     let runIsActive = false;
@@ -735,13 +682,6 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
         return;
       }
 
-      const summary =
-        (useBuiltIn ? "<strong>Built-in 70 schools</strong>" : "<strong>Custom list</strong>") +
-        " · tiers <strong>" +
-        tiers.map((t) => "T" + t).join(", ") +
-        "</strong>";
-      addMsg("user", "<p>Run scrape: " + summary + "</p>");
-
       const body = {
         useBuiltInList: useBuiltIn,
         schoolsCsv,
@@ -755,13 +695,11 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) {
-        addMsg("bot", "<p>" + (j.error || res.statusText) + "</p>");
+        alert(j.error || res.statusText || "Could not start scrape run.");
         return;
       }
-      addMsg(
-        "bot",
-        "<p>Job started — watch the log below. When it finishes, open <a href=\"/contacts.html\" style=\"color:var(--accent)\">Contacts</a> to see everyone in the dashboard (no separate files to download).</p>"
-      );
+      document.getElementById("statusLine").innerHTML =
+        "Status: <strong>Run started</strong> · Watching scrape targets below";
       refreshStatus();
     };
 
