@@ -160,7 +160,17 @@ app.post("/api/contact-checks", (req, res) => {
   }
 });
 
-app.use(express.static(path.join(ROOT, "public"), { extensions: ["html"] }));
+app.use(
+  express.static(path.join(ROOT, "public"), {
+    extensions: ["html"],
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith(".html")) {
+        // Ensure latest UI changes are always fetched after deploy.
+        res.setHeader("Cache-Control", "no-store, max-age=0");
+      }
+    },
+  })
+);
 
 app.get("/api/status", (req, res) => {
   res.json({

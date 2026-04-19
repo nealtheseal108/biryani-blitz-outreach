@@ -59,6 +59,17 @@
   }
 
   .brand { display: flex; align-items: center; gap: 14px; }
+  .build-tag {
+    font-family: var(--font-cno);
+    font-style: italic;
+    font-size: 0.64rem;
+    color: #fdc99f;
+    opacity: 0.85;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-left: 0.45rem;
+    white-space: nowrap;
+  }
 
   .logo-mark {
     width: 50px;
@@ -556,6 +567,7 @@
         <span>Biryani Blitz</span>
         Outreach Dashboard
       </h1>
+      <span class="build-tag">build 1a79563</span>
     </div>
     <a href="/" style="color: #ff7c38; font-size: 0.75rem; margin-right: 0.75rem; text-decoration: none; font-family: inherit;">← Chat &amp; tracker</a>
     <button class="export-btn" id="exportBtn" type="button" onclick="exportCSV()">Export CSV</button>
