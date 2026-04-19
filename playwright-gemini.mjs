@@ -219,6 +219,25 @@ async function searchBing(page, query) {
   return links;
 }
 
+async function searchGoogle(page, query) {
+  const enc = encodeURIComponent(query);
+  await page.goto(`https://www.google.com/search?q=${enc}&num=10`, {
+    waitUntil: "domcontentloaded",
+    timeout: 45000,
+  });
+  await sleep(900);
+  const links = await page
+    .$$eval("a h3", (heads) =>
+      heads
+        .map((h) => h.closest("a"))
+        .filter(Boolean)
+        .map((a) => a.href)
+        .filter(Boolean)
+    )
+    .catch(() => []);
+  return links;
+}
+
 function buildFallbackCampusUrls(universityName, maxPages) {
   const raw = String(universityName || "")
     .trim()
@@ -248,6 +267,27 @@ function buildFallbackCampusUrls(universityName, maxPages) {
   return out.slice(0, maxPages);
 }
 
+function isGenericCampusPage(url) {
+  try {
+    const u = new URL(url);
+    const p = (u.pathname || "/").toLowerCase().replace(/\/+$/, "") || "/";
+    return p === "/" || p === "/about" || p === "/students";
+  } catch {
+    return false;
+  }
+}
+
+function urlRelevanceScore(url) {
+  const s = String(url || "").toLowerCase();
+  let score = 0;
+  if (/directory|staff|leadership|team|contact|people/.test(s)) score += 5;
+  if (/student[-_]?affairs|student[-_]?life|student[-_]?government|auxiliary|dining/.test(s)) score += 4;
+  if (/union|vendor|commercial|partnership|entrepreneur|innovation|sustainab|ehs|safety|permit/.test(s))
+    score += 3;
+  if (isGenericCampusPage(s)) score -= 6;
+  return score;
+}
+
 async function discoverUrls(browser, universityName, entrepreneurship, maxPages, opts) {
   const page = await browser.newPage({
     userAgent:
@@ -262,9 +302,16 @@ async function discoverUrls(browser, universityName, entrepreneurship, maxPages,
     for (const q of queries) {
       let links = [];
       try {
-        links = await searchDuckDuckGo(page, q);
+        links = await searchGoogle(page, q);
       } catch {
         links = [];
+      }
+      if (links.length < 2) {
+        try {
+          links = await searchDuckDuckGo(page, q);
+        } catch {
+          /* empty */
+        }
       }
       if (links.length < 2) {
         try {
@@ -280,11 +327,16 @@ async function discoverUrls(browser, universityName, entrepreneurship, maxPages,
     await page.close();
   }
 
-  let deduped = dedupeUrls(collected).slice(0, maxPages);
+  let deduped = dedupeUrls(collected).sort((a, b) => urlRelevanceScore(b) - urlRelevanceScore(a));
+  const nonGeneric = deduped.filter((u) => !isGenericCampusPage(u));
+  if (nonGeneric.length > 0) deduped = nonGeneric;
+  deduped = deduped.slice(0, maxPages);
   if (deduped.length === 0) {
-    const fallback = dedupeUrls(buildFallbackCampusUrls(universityName, maxPages)).slice(0, maxPages);
+    const fallback = dedupeUrls(buildFallbackCampusUrls(universityName, maxPages))
+      .filter((u) => !isGenericCampusPage(u))
+      .slice(0, maxPages);
     if (fallback.length) {
-      console.log(`  ↪ search empty; trying ${fallback.length} campus fallback URL(s)`);
+      console.log(`  ↪ search empty; trying ${fallback.length} targeted campus fallback URL(s)`);
       deduped = fallback;
     }
   }
