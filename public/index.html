@@ -126,6 +126,19 @@
       border-bottom: 1px solid var(--glass-border);
       margin-bottom: 0.5rem;
     }
+    .brand-head {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .brand-head img {
+      width: 44px;
+      height: 44px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 238, 222, 0.5);
+      background: #ffeede;
+      flex-shrink: 0;
+    }
     header h1 {
       font-size: 1.05rem;
       font-weight: 600;
@@ -574,7 +587,10 @@
   <div class="cursor-ring" id="cursorRing"></div>
   <div class="app">
     <header>
-      <h1><span>Biryani Blitz</span>Outreach assistant</h1>
+      <div class="brand-head">
+        <img src="/img/biryani-blitz-logo-light.png" alt="Biryani Blitz logo" />
+        <h1><span>Biryani Blitz</span>Outreach assistant</h1>
+      </div>
       <nav>
         <button type="button" class="nav-btn" id="btnOpenTracker">Outreach tracker</button>
         <a href="/contacts.html" target="_blank" rel="noopener noreferrer">Open contacts tab ↗</a>
