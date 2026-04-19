@@ -743,6 +743,12 @@ UC Berkeley"></textarea>
         etaEl.textContent = "ETA: gathering URLs…";
         return;
       }
+      // On single-school runs, progress can reach 1/1 long before the process exits.
+      // Avoid misleading "ETA: ~0s" while still actively scraping/extracting.
+      if (p.current >= p.total) {
+        etaEl.textContent = "ETA: finalizing…";
+        return;
+      }
       if (!etaStartMs || p.current !== lastProgress.current || p.total !== lastProgress.total) {
         if (!etaStartMs) etaStartMs = Date.now();
         lastProgress = p;
