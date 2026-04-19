@@ -706,7 +706,16 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
         const r = await fetch("/api/logs");
         const j = await r.json();
         lastLogLines = j.lines || [];
-        document.getElementById("logPreview").textContent = lastLogLines.slice(-40).join("\n");
+        const transparent = [];
+        for (const line of lastLogLines) {
+          const s = String(line || "");
+          // Keep only exact scrape targets shown by the scraper: "    → https://..."
+          if (/\s→\shttps?:\/\//.test(s)) transparent.push(s);
+        }
+        document.getElementById("logPreview").textContent =
+          transparent.length > 0
+            ? transparent.slice(-80).join("\n")
+            : "No scrape destinations yet. Start a run to see exact pages Playwright visits.";
         updateEtaDisplay();
       } catch { /* empty */ }
     }
