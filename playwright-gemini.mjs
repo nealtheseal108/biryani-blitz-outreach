@@ -365,6 +365,8 @@ async function discoverUrls(browser, universityName, entrepreneurship, maxPages,
   const tiers = normalizeTiers(opts.tiers);
   const queries = buildTierQueries(universityName, entrepreneurship, tiers);
   const interSearchDelay = Math.min(opts.delayMs, 3500);
+  // DDG HTML is frequently slow/blocked on hosted infra; keep it optional and last.
+  const useDuckDuckGo = process.env.SEARCH_DDG === "1";
 
   const collected = [];
   try {
@@ -384,19 +386,19 @@ async function discoverUrls(browser, universityName, entrepreneurship, maxPages,
       if (links.length < 2) {
         try {
           const t0 = Date.now();
-          links = await withTimeout(searchDuckDuckGo(page, q), 20000, "DuckDuckGo search");
-          console.log(`    DuckDuckGo: ${links.length} link(s) in ${Date.now() - t0}ms`);
-        } catch (e) {
-          console.log(`    DuckDuckGo: failed (${String(e?.message || e).slice(0, 120)})`);
-        }
-      }
-      if (links.length < 2) {
-        try {
-          const t0 = Date.now();
-          links = await withTimeout(searchBing(page, q), 20000, "Bing search");
+          links = await withTimeout(searchBing(page, q), 15000, "Bing search");
           console.log(`    Bing: ${links.length} link(s) in ${Date.now() - t0}ms`);
         } catch (e) {
           console.log(`    Bing: failed (${String(e?.message || e).slice(0, 120)})`);
+        }
+      }
+      if (links.length < 2 && useDuckDuckGo) {
+        try {
+          const t0 = Date.now();
+          links = await withTimeout(searchDuckDuckGo(page, q), 10000, "DuckDuckGo search");
+          console.log(`    DuckDuckGo: ${links.length} link(s) in ${Date.now() - t0}ms`);
+        } catch (e) {
+          console.log(`    DuckDuckGo: failed (${String(e?.message || e).slice(0, 120)})`);
         }
       }
       collected.push(...links);
