@@ -8,6 +8,9 @@
  *   GOOGLE_API_KEY or GEMINI_API_KEY — https://aistudio.google.com/apikey
  *   GEMINI_MODEL — default gemini-2.0-flash (1.5 models were removed from the API)
  *   GEMINI_RESOLVE_UNIVERSITY=1 — optional extra Gemini call per school to expand abbreviations (uses quota; default off)
+ *   LLM_PROVIDER=gemini|openrouter — extraction provider (default gemini)
+ *   OPENROUTER_API_KEY — enables OpenRouter extraction fallback
+ *   OPENROUTER_MODEL — default meta-llama/llama-3.1-8b-instruct:free
  *
  * Examples:
  *   npm run scrape:batch -- --max 3
@@ -22,6 +25,9 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
 const API_KEY = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+const LLM_PROVIDER = (process.env.LLM_PROVIDER || "gemini").toLowerCase();
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "meta-llama/llama-3.1-8b-instruct:free";
 
 const DEFAULT_DATA = path.join("data", "universities.json");
 
@@ -513,6 +519,47 @@ Rules:
 - Do not fabricate emails.
 - If no good contacts, return []`;
 
+  async function openRouterExtract() {
+    if (!OPENROUTER_API_KEY) return null;
+    const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: OPENROUTER_MODEL,
+        temperature: 0.2,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You extract contact records from university web text. Return only valid JSON arrays, never markdown.",
+          },
+          { role: "user", content: prompt },
+        ],
+      }),
+    });
+    if (!resp.ok) {
+      const t = await resp.text().catch(() => "");
+      throw new Error(`OpenRouter ${resp.status}: ${t.slice(0, 220)}`);
+    }
+    const data = await resp.json();
+    const text = data?.choices?.[0]?.message?.content || "";
+    const parsed = extractJSON(text);
+    if (!Array.isArray(parsed)) throw new Error("OpenRouter did not return a parseable JSON array");
+    return parsed;
+  }
+
+  if (LLM_PROVIDER === "openrouter") {
+    try {
+      return (await openRouterExtract()) || mailtoFallbackContacts({ mailtos, university, sourceUrl });
+    } catch (e) {
+      console.warn(`      ⚠ OpenRouter extraction failed; falling back to mailto-only: ${String(e.message || e)}`);
+      return mailtoFallbackContacts({ mailtos, university, sourceUrl });
+    }
+  }
+
   let text;
   try {
     const result = await model.generateContent(prompt);
@@ -522,8 +569,17 @@ Rules:
     if (isGeminiQuotaError(msg)) {
       geminiSkipExtract = true;
       console.warn(
-        "      ⚠ Gemini quota / rate limit — switching to mailto-only fallback extraction for the rest of this run."
+        "      ⚠ Gemini quota / rate limit."
       );
+      if (OPENROUTER_API_KEY) {
+        try {
+          console.log(`      ↪ trying OpenRouter fallback model ${OPENROUTER_MODEL}`);
+          return (await openRouterExtract()) || mailtoFallbackContacts({ mailtos, university, sourceUrl });
+        } catch (orErr) {
+          console.warn(`      ⚠ OpenRouter fallback failed: ${String(orErr.message || orErr)}`);
+        }
+      }
+      console.warn("      ↪ switching to mailto-only fallback extraction for the rest of this run.");
       return mailtoFallbackContacts({ mailtos, university, sourceUrl });
     }
     throw e;
@@ -604,6 +660,7 @@ async function runBatch(opts) {
   const tierList = normalizeTiers(opts.tiers);
   const batchOpts = { ...opts, tiers: tierList };
   console.log(`\nTier filter: ${tierList.map((t) => `T${t}`).join(", ")}`);
+  console.log(`LLM extraction provider: ${LLM_PROVIDER}${OPENROUTER_API_KEY ? " (OpenRouter key detected)" : ""}`);
   console.log(
     `AI university name expansion: ${batchOpts.resolveUniversity ? "on (extra Gemini call per school)" : "off (set GEMINI_RESOLVE_UNIVERSITY=1 or --resolve-university to enable)"}\n`
   );
