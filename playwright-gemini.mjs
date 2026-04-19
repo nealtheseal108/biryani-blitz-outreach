@@ -28,6 +28,7 @@ const API_KEY = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
 const LLM_PROVIDER = (process.env.LLM_PROVIDER || "gemini").toLowerCase();
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "meta-llama/llama-3.1-8b-instruct:free";
+const SEARCH_LLM_TERMS = process.env.SEARCH_LLM_TERMS !== "0";
 
 const DEFAULT_DATA = path.join("data", "universities.json");
 
@@ -90,23 +91,34 @@ function normalizeTiers(tiers) {
   return [...new Set(tiers)].filter((n) => n >= 1 && n <= 9).sort((a, b) => a - b);
 }
 
-function buildTierQueries(shortName, entrepreneurship, tiers) {
-  const ent = (entrepreneurship || "entrepreneurship center").trim();
+function buildTierQueries(shortName, entrepreneurship, tiers, tierAliasesByNumber = {}) {
   const s = shortName.replace(/\s*\([^)]+\)\s*/g, " ").trim();
-  const map = {
-    1: () => `${s} student union business development commercial vendor partnership email site:edu`,
-    2: () => `${s} vice president student affairs student experience email site:edu`,
-    3: () => `${s} student government president ASUC email site:edu`,
-    4: () => `${s} ${ent} director email entrepreneurship site:edu`,
-    5: () => `${s} South Asian multicultural cultural center director email site:edu`,
-    6: () => `${s} sustainability green events food vendor email site:edu`,
-    7: () => `${s} food truck mobile vendor university union email site:edu`,
-    8: () => `${s} campus dining dining services director email site:edu`,
-    9: () => `${s} environmental health EHS food safety temporary food permit email site:edu`,
+  const ent = (entrepreneurship || "entrepreneurship center").trim();
+  const tierPhrase = {
+    1: "student union commercial",
+    2: "student affairs",
+    3: "student government",
+    4: ent,
+    5: "multicultural center",
+    6: "sustainability",
+    7: "food truck",
+    8: "dining services",
+    9: "environmental health and safety",
   };
   const queries = [];
   for (const t of tiers) {
-    if (map[t]) queries.push(map[t]());
+    const base = tierPhrase[t];
+    if (!base) continue;
+    const aliases = Array.isArray(tierAliasesByNumber?.[String(t)])
+      ? tierAliasesByNumber[String(t)]
+      : Array.isArray(tierAliasesByNumber?.[t])
+        ? tierAliasesByNumber[t]
+        : [];
+    const phrases = [base, ...aliases.map((x) => String(x || "").trim()).filter(Boolean)].slice(0, 2);
+    for (const phrase of phrases) {
+      queries.push(`${s} ${phrase} staff email site:edu`);
+      queries.push(`${s} ${phrase} directory email site:edu`);
+    }
   }
   return queries;
 }
@@ -363,10 +375,14 @@ async function discoverUrls(browser, universityName, entrepreneurship, maxPages,
   });
   const page = await context.newPage();
   const tiers = normalizeTiers(opts.tiers);
-  const queries = buildTierQueries(universityName, entrepreneurship, tiers);
+  const tierAliases = await resolveTierTerminology({ universityName, entrepreneurship, tiers });
+  const queries = buildTierQueries(universityName, entrepreneurship, tiers, tierAliases);
   const interSearchDelay = Math.min(opts.delayMs, 3500);
   // DDG HTML is frequently slow/blocked on hosted infra; keep it optional and last.
   const useDuckDuckGo = process.env.SEARCH_DDG === "1";
+  if (Object.keys(tierAliases || {}).length > 0) {
+    console.log(`  Search terminology aliases: ${JSON.stringify(tierAliases)}`);
+  }
 
   const collected = [];
   try {
@@ -594,6 +610,94 @@ Rules:
   };
 }
 
+async function resolveTierTerminology({ universityName, entrepreneurship, tiers }) {
+  if (!SEARCH_LLM_TERMS || !tiers?.length) return {};
+  const name = String(universityName || "").trim();
+  const ent = String(entrepreneurship || "").trim();
+  if (!name) return {};
+
+  const defaultTerms = {
+    1: "student union commercial",
+    2: "student affairs",
+    3: "student government",
+    4: ent || "entrepreneurship center",
+    5: "multicultural center",
+    6: "sustainability",
+    7: "food truck",
+    8: "dining services",
+    9: "environmental health and safety",
+  };
+  const requested = tiers.map((t) => `T${t}=${defaultTerms[t] || "general staff"}`).join(", ");
+  const prompt = `Return ONLY JSON object (no markdown) mapping tier numbers to up to 1 campus-specific alias phrase.
+
+University: ${JSON.stringify(name)}
+Entrepreneurship hint: ${JSON.stringify(ent)}
+Requested tiers: ${requested}
+
+Format:
+{
+  "1": ["optional alias"],
+  "2": [],
+  "4": ["Innovate Carolina"]
+}
+
+Rules:
+- Include only aliases likely used by this campus for that department.
+- Max 1 alias string per tier.
+- Keep each alias under 40 chars.
+- If unknown, return [] for that tier.
+- Do not repeat generic words already in default terms unless campus-branded.`;
+
+  if (OPENROUTER_API_KEY) {
+    try {
+      const resp = await withTimeout(
+        fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: OPENROUTER_MODEL,
+            temperature: 0.1,
+            messages: [
+              { role: "system", content: "Return only strict JSON objects." },
+              { role: "user", content: prompt },
+            ],
+          }),
+        }),
+        14000,
+        "OpenRouter search terminology"
+      );
+      if (resp.ok) {
+        const data = await resp.json();
+        const text = data?.choices?.[0]?.message?.content || "";
+        const parsed = extractJSONObject(text);
+        if (parsed && typeof parsed === "object") return parsed;
+      }
+    } catch {
+      /* empty */
+    }
+  }
+
+  if (!API_KEY || geminiSkipUniversityResolve) return {};
+  try {
+    const genAI = new GoogleGenerativeAI(API_KEY);
+    const model = genAI.getGenerativeModel({
+      model: MODEL,
+      generationConfig: { temperature: 0.1, maxOutputTokens: 512 },
+    });
+    const result = await withTimeout(model.generateContent(prompt), 14000, "Gemini search terminology");
+    const text = result?.response?.text?.() || "";
+    const parsed = extractJSONObject(text);
+    if (parsed && typeof parsed === "object") return parsed;
+  } catch (e) {
+    const msg = String(e?.message || e);
+    if (isGeminiQuotaError(msg)) geminiSkipUniversityResolve = true;
+  }
+  return {};
+}
+
 async function geminiExtract({ university, sourceUrl, pageTitle, bodyText, mailtos, tierFocus }) {
   if (geminiSkipExtract) {
     return mailtoFallbackContacts({ mailtos, university, sourceUrl });
@@ -788,6 +892,7 @@ async function runBatch(opts) {
   const batchOpts = { ...opts, tiers: tierList };
   console.log(`\nTier filter: ${tierList.map((t) => `T${t}`).join(", ")}`);
   console.log(`LLM extraction provider: ${LLM_PROVIDER}${OPENROUTER_API_KEY ? " (OpenRouter key detected)" : ""}`);
+  console.log(`LLM search terminology aliases: ${SEARCH_LLM_TERMS ? "on" : "off (set SEARCH_LLM_TERMS=1 to enable)"}`);
   console.log(
     `AI university name expansion: ${batchOpts.resolveUniversity ? "on (extra Gemini call per school)" : "off (set GEMINI_RESOLVE_UNIVERSITY=1 or --resolve-university to enable)"}\n`
   );

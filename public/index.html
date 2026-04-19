@@ -791,7 +791,7 @@ UC Berkeley"></textarea>
           if (/\s→\shttps?:\/\//.test(s)) transparent.push(s);
           // Also keep high-signal lifecycle/error lines so panel never appears silently stuck.
           if (
-            /Tier filter:|LLM extraction provider:|AI university name expansion:|━━\s*\d+\/\d+|\[search \d+\/\d+\]|Google:|Bing:|DuckDuckGo:|search empty;|Found \d+ page\(s\) to scrape|no result URLs|saved \d+ unique emails|Done\.|Process exited|Search failed|Gemini:|OpenRouter|quota|error|failed/i.test(
+            /Tier filter:|LLM extraction provider:|LLM search terminology aliases:|AI university name expansion:|━━\s*\d+\/\d+|\[search \d+\/\d+\]|Search terminology aliases:|Google:|Bing:|DuckDuckGo:|search empty;|Found \d+ page\(s\) to scrape|no result URLs|saved \d+ unique emails|Done\.|Process exited|Search failed|Gemini:|OpenRouter|quota|error|failed/i.test(
               s
             )
           ) {
