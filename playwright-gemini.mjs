@@ -27,6 +27,8 @@ const DEFAULT_DATA = path.join("data", "universities.json");
 
 /** After quota/rate-limit on university resolve, skip further resolve calls this run. */
 let geminiSkipUniversityResolve = false;
+/** After quota/rate-limit on extraction, skip further Gemini extraction calls this run. */
+let geminiSkipExtract = false;
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -349,6 +351,38 @@ function isGeminiQuotaError(msg) {
   );
 }
 
+function inferTierFromUrl(url) {
+  const s = String(url || "").toLowerCase();
+  if (/dining|food|meal|auxiliary/.test(s)) return 8;
+  if (/studentaffairs|students|student-life|studentlife/.test(s)) return 2;
+  if (/sustainab|green/.test(s)) return 6;
+  if (/government|student-gov|asg|asuc/.test(s)) return 3;
+  if (/health|ehs|safety|permit/.test(s)) return 9;
+  return 0;
+}
+
+function mailtoFallbackContacts({ mailtos, university, sourceUrl }) {
+  const tier = inferTierFromUrl(sourceUrl);
+  const out = [];
+  for (const m of mailtos || []) {
+    const email = String(m?.email || "")
+      .trim()
+      .toLowerCase();
+    if (!email || !email.includes("@")) continue;
+    const hint = String(m?.linkText || "").trim();
+    out.push({
+      name: hint || null,
+      title: "mailto contact",
+      email,
+      tier: tier || undefined,
+      confidence: "low",
+      source_url: sourceUrl,
+      university,
+    });
+  }
+  return dedupeContactsByEmail(out);
+}
+
 async function resolveUniversityWithGemini(u) {
   if (!API_KEY || geminiSkipUniversityResolve) return null;
   const genAI = new GoogleGenerativeAI(API_KEY);
@@ -428,6 +462,9 @@ Rules:
 }
 
 async function geminiExtract({ university, sourceUrl, pageTitle, bodyText, mailtos, tierFocus }) {
+  if (geminiSkipExtract) {
+    return mailtoFallbackContacts({ mailtos, university, sourceUrl });
+  }
   if (!API_KEY) throw new Error("Set GOOGLE_API_KEY (or GEMINI_API_KEY) from https://aistudio.google.com/apikey");
   const genAI = new GoogleGenerativeAI(API_KEY);
   const model = genAI.getGenerativeModel({
@@ -476,12 +513,25 @@ Rules:
 - Do not fabricate emails.
 - If no good contacts, return []`;
 
-  const result = await model.generateContent(prompt);
-  const text = result.response.text();
+  let text;
+  try {
+    const result = await model.generateContent(prompt);
+    text = result.response.text();
+  } catch (e) {
+    const msg = String(e?.message || e);
+    if (isGeminiQuotaError(msg)) {
+      geminiSkipExtract = true;
+      console.warn(
+        "      ⚠ Gemini quota / rate limit — switching to mailto-only fallback extraction for the rest of this run."
+      );
+      return mailtoFallbackContacts({ mailtos, university, sourceUrl });
+    }
+    throw e;
+  }
   const parsed = extractJSON(text);
   if (!Array.isArray(parsed)) {
     console.error("Gemini raw:", text.slice(0, 1500));
-    throw new Error("Could not parse JSON array from Gemini response");
+    return mailtoFallbackContacts({ mailtos, university, sourceUrl });
   }
   return parsed;
 }
@@ -526,6 +576,9 @@ async function processUrls(browser, urls, universityLabel, allContacts, tierFocu
     } catch (e) {
       console.error(`      ✗ Gemini: ${e.message}`);
       continue;
+    }
+    if (geminiSkipExtract) {
+      console.log(`      ↪ fallback mode: using mailto-only extraction (${contacts.length} contact(s))`);
     }
 
     const withMeta = contacts.map((c) => ({
