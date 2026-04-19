@@ -116,8 +116,8 @@ function buildTierQueries(shortName, entrepreneurship, tiers, tierAliasesByNumbe
         : [];
     const phrases = [base, ...aliases.map((x) => String(x || "").trim()).filter(Boolean)].slice(0, 2);
     for (const phrase of phrases) {
-      queries.push(`${s} ${phrase} staff email site:edu`);
-      queries.push(`${s} ${phrase} directory email site:edu`);
+      queries.push({ tier: t, phrase, query: `${s} ${phrase} staff email site:edu` });
+      queries.push({ tier: t, phrase, query: `${s} ${phrase} directory email site:edu` });
     }
   }
   return queries;
@@ -437,11 +437,13 @@ async function discoverUrls(browser, universityName, entrepreneurship, maxPages,
   }
 
   const collected = [];
+  const firstTierByUrl = new Map();
   try {
     for (let i = 0; i < queries.length; i++) {
-      const q = queries[i];
+      const qObj = queries[i];
+      const q = qObj.query;
       const qLabel = `${i + 1}/${queries.length}`;
-      console.log(`  [search ${qLabel}] ${q}`);
+      console.log(`  [search ${qLabel}] [T${qObj.tier}] ${q}`);
       let links = [];
       try {
         const t0 = Date.now();
@@ -469,6 +471,10 @@ async function discoverUrls(browser, universityName, entrepreneurship, maxPages,
           console.log(`    DuckDuckGo: failed (${String(e?.message || e).slice(0, 120)})`);
         }
       }
+      for (const raw of links) {
+        const key = unwrapSearchRedirect(raw);
+        if (!firstTierByUrl.has(key)) firstTierByUrl.set(key, qObj.tier);
+      }
       collected.push(...links);
       await sleep(interSearchDelay);
     }
@@ -484,7 +490,36 @@ async function discoverUrls(browser, universityName, entrepreneurship, maxPages,
   if (scoped.length > 0) {
     deduped = scoped;
   }
+
+  // Coverage pass: keep at least one URL per selected tier when available.
+  const tierBuckets = new Map();
+  for (const t of tiers) tierBuckets.set(t, []);
+  for (const u of deduped) {
+    const t = firstTierByUrl.get(u);
+    if (!t || !tierBuckets.has(t)) continue;
+    tierBuckets.get(t).push(u);
+  }
+  const diversified = [];
+  const seen = new Set();
+  for (const t of tiers) {
+    const bucket = tierBuckets.get(t) || [];
+    if (!bucket.length) continue;
+    const pick = bucket[0];
+    if (!seen.has(pick)) {
+      diversified.push(pick);
+      seen.add(pick);
+    }
+  }
+  for (const u of deduped) {
+    if (seen.has(u)) continue;
+    diversified.push(u);
+    seen.add(u);
+  }
+  if (diversified.length) deduped = diversified;
+
   console.log(`  Scoped URLs for "${universityName}": ${deduped.length}/${nonGeneric.length || deduped.length}`);
+  const covered = tiers.filter((t) => (tierBuckets.get(t) || []).length > 0);
+  console.log(`  Tier URL coverage: ${covered.length}/${tiers.length} (${covered.map((t) => `T${t}`).join(", ") || "none"})`);
   deduped = deduped.slice(0, maxPages);
   if (deduped.length === 0) {
     console.log("  (search engines returned no usable URLs)");
