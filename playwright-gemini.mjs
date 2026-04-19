@@ -365,6 +365,58 @@ function urlRelevanceScore(url) {
   return score;
 }
 
+function universityMarkers(universityName) {
+  const raw = String(universityName || "").toLowerCase();
+  const clean = raw.replace(/[^a-z0-9\s]/g, " ");
+  const parts = clean.split(/\s+/).filter(Boolean);
+  const stop = new Set(["the", "of", "at", "for", "and", "in"]);
+  const markers = new Set();
+
+  // Keep full tokens that can appear in host/path (e.g., nyu, berkeley, carolina).
+  for (const p of parts) {
+    if (p.length >= 3 && !stop.has(p)) markers.add(p);
+  }
+
+  // Acronym catches UW, UNC, NYU, etc.
+  const acronymWords = parts.filter((p) => p.length > 0 && !stop.has(p));
+  if (acronymWords.length >= 2) {
+    const ac = acronymWords.map((w) => w[0]).join("");
+    if (ac.length >= 2) markers.add(ac);
+  }
+
+  // Two-word slug catches cases like chapelhill, stonybrook.
+  if (acronymWords.length >= 2) {
+    for (let i = 0; i < acronymWords.length - 1; i++) {
+      const a = acronymWords[i];
+      const b = acronymWords[i + 1];
+      if (a.length >= 3 && b.length >= 3) markers.add(`${a}${b}`);
+    }
+  }
+
+  return [...markers];
+}
+
+function urlMatchesUniversity(url, markers) {
+  if (!markers?.length) return true;
+  let hay = "";
+  try {
+    const u = new URL(url);
+    hay = `${u.hostname}${u.pathname}`.toLowerCase();
+  } catch {
+    return false;
+  }
+  for (const m of markers) {
+    if (!m) continue;
+    if (m.length <= 3) {
+      const re = new RegExp(`(^|[^a-z0-9])${m}([^a-z0-9]|$)`, "i");
+      if (re.test(hay)) return true;
+    } else if (hay.includes(m)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 async function discoverUrls(browser, universityName, entrepreneurship, maxPages, opts) {
   const context = await browser.newContext({
     userAgent:
@@ -427,6 +479,12 @@ async function discoverUrls(browser, universityName, entrepreneurship, maxPages,
   let deduped = dedupeUrls(collected).sort((a, b) => urlRelevanceScore(b) - urlRelevanceScore(a));
   const nonGeneric = deduped.filter((u) => !isGenericCampusPage(u));
   if (nonGeneric.length > 0) deduped = nonGeneric;
+  const markers = universityMarkers(universityName);
+  const scoped = deduped.filter((u) => urlMatchesUniversity(u, markers));
+  if (scoped.length > 0) {
+    deduped = scoped;
+  }
+  console.log(`  Scoped URLs for "${universityName}": ${deduped.length}/${nonGeneric.length || deduped.length}`);
   deduped = deduped.slice(0, maxPages);
   if (deduped.length === 0) {
     console.log("  (search engines returned no usable URLs)");
