@@ -6,7 +6,7 @@
  *
  * Env:
  *   GOOGLE_API_KEY or GEMINI_API_KEY — https://aistudio.google.com/apikey
- *   GEMINI_MODEL — default gemini-1.5-flash
+ *   GEMINI_MODEL — default gemini-2.0-flash (1.5 models were removed from the API)
  *
  * Examples:
  *   npm run scrape:batch -- --max 3
@@ -19,7 +19,7 @@ import path from "path";
 import { chromium } from "playwright";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+const MODEL = process.env.GEMINI_MODEL || "gemini-2.0-flash";
 const API_KEY = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
 
 const DEFAULT_DATA = path.join("data", "universities.json");
