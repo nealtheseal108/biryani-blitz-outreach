@@ -52,9 +52,37 @@
   font-display: swap;
 }
 
+/* Style aliases so UI can intentionally lean Ex/ExO/CnO-like via stretch+italic */
+@font-face {
+  font-family: "BB Ex";
+  font-weight: 500;
+  font-style: normal;
+  src: url("/fonts/HelveticaNeueLTPro-Md.otf") format("opentype");
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "BB ExO";
+  font-weight: 500;
+  font-style: italic;
+  src: url("/fonts/HelveticaNeueLTPro-MdIt.otf") format("opentype");
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "BB CnO";
+  font-weight: 400;
+  font-style: italic;
+  src: url("/fonts/HelveticaNeueLTPro-It.otf") format("opentype");
+  font-display: swap;
+}
+
 :root {
   --font: "Helvetica Neue LT Pro", "Helvetica Neue", -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
+  --font-ex: "BB Ex", "Helvetica Neue LT Pro", "Helvetica Neue", sans-serif;
+  --font-exo: "BB ExO", "Helvetica Neue LT Pro", "Helvetica Neue", sans-serif;
+  --font-cno: "BB CnO", "Helvetica Neue LT Pro", "Helvetica Neue", sans-serif;
   --bb-0: #ffeede;
   --bb-1: #fdc99f;
   --bb-2: #faad75;

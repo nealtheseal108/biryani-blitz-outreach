@@ -504,14 +504,23 @@
     background: radial-gradient(ellipse 45% 35% at 50% 55%, rgba(255, 238, 222, 0.12), transparent 70%);
   }
   h1, .uni-name {
+    font-family: var(--font-exo);
     font-style: italic;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     font-stretch: expanded;
   }
   h1 span, .stat-label, .filter-btn {
+    font-family: var(--font-cno);
     font-style: italic;
     font-stretch: condensed;
+  }
+  .stat-num, .results-count, .uni-count, .track-badge, .tier-pill {
+    font-family: var(--font-ex);
+  }
+  input[type="search"], select, th, td, .copy-email-btn {
+    font-family: var(--font-cno);
+    font-style: italic;
   }
   .stat-cell, .university-header, .contacts-wrap, input[type="search"], select, .filter-btn, .export-btn {
     backdrop-filter: none !important;
