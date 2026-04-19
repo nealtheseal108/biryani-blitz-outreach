@@ -534,7 +534,7 @@
       backdrop-filter: none !important;
       -webkit-backdrop-filter: none !important;
     }
-    .cursor-ring, .cursor-dot {
+    .cursor-ring {
       position: fixed;
       left: 0;
       top: 0;
@@ -543,23 +543,18 @@
       z-index: 2000;
       border-radius: 999px;
     }
-    .cursor-dot {
-      width: 8px;
-      height: 8px;
-      background: #ffeede;
-      box-shadow: 0 0 14px rgba(255, 238, 222, 0.5);
-    }
     .cursor-ring {
-      width: 28px;
-      height: 28px;
-      border: 1.5px solid #faad75;
-      background: rgba(250, 173, 117, 0.14);
+      width: 26px;
+      height: 26px;
+      border: 2px solid #ffeede;
+      background: rgba(255, 238, 222, 0.16);
+      box-shadow: 0 0 14px rgba(255, 238, 222, 0.45);
+      transition: opacity 0.12s ease;
     }
   </style>
 </head>
 <body>
   <div class="cursor-ring" id="cursorRing"></div>
-  <div class="cursor-dot" id="cursorDot"></div>
   <div class="app">
     <header>
       <h1><span>Biryani Blitz</span>Outreach assistant</h1>
@@ -980,10 +975,9 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
 
     (() => {
       const ring = document.getElementById("cursorRing");
-      const dot = document.getElementById("cursorDot");
       let tx = window.innerWidth / 2;
       let ty = window.innerHeight / 2;
-      let rx = tx, ry = ty, dx = tx, dy = ty;
+      let rx = tx, ry = ty;
       window.addEventListener("mousemove", (e) => {
         tx = e.clientX;
         ty = e.clientY;
@@ -992,13 +986,20 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
         document.body.style.setProperty("--px", String(px));
         document.body.style.setProperty("--py", String(py));
       });
+      const frame = document.querySelector(".data-frame");
+      if (frame) {
+        frame.addEventListener("mouseenter", () => {
+          ring.style.opacity = "0";
+        });
+        frame.addEventListener("mouseleave", () => {
+          ring.style.opacity = "1";
+        });
+      }
       const tick = () => {
         rx += (tx - rx) * 0.14;
         ry += (ty - ry) * 0.14;
-        dx += (tx - dx) * 0.35;
-        dy += (ty - dy) * 0.35;
-        ring.style.left = `${rx}px`; ring.style.top = `${ry}px`;
-        dot.style.left = `${dx}px`; dot.style.top = `${dy}px`;
+        ring.style.left = `${rx}px`;
+        ring.style.top = `${ry}px`;
         requestAnimationFrame(tick);
       };
       tick();
