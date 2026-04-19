@@ -47,9 +47,74 @@
       display: flex;
       flex-direction: column;
       height: 100%;
-      max-width: 920px;
+      max-width: 1680px;
       margin: 0 auto;
       padding: 0.75rem 1rem 1rem;
+    }
+
+    .workspace {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(440px, 1fr) minmax(520px, 1.15fr);
+      gap: 0.85rem;
+    }
+
+    .request-pane,
+    .data-pane {
+      min-height: 0;
+      border-radius: var(--radius);
+      border: 1px solid var(--glass-border);
+      background: var(--glass-surface);
+      backdrop-filter: blur(var(--glass-blur));
+      -webkit-backdrop-filter: blur(var(--glass-blur));
+      box-shadow: var(--glass-inset), 0 8px 32px rgba(0, 0, 0, 0.12);
+      overflow: hidden;
+    }
+
+    .request-pane {
+      display: flex;
+      flex-direction: column;
+      padding: 0 0.9rem 0.8rem;
+    }
+
+    .data-pane {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .data-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.6rem;
+      padding: 0.8rem 0.95rem;
+      border-bottom: 1px solid var(--glass-border);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .data-head h2 {
+      font-size: 0.82rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .data-head a {
+      font-size: 0.72rem;
+      color: var(--text);
+      text-decoration: none;
+      opacity: 0.85;
+    }
+
+    .data-head a:hover { opacity: 1; color: var(--accent); }
+
+    .data-frame {
+      width: 100%;
+      flex: 1;
+      border: 0;
+      background: transparent;
     }
 
     header {
@@ -435,6 +500,11 @@
       }
       .tracker-row select { grid-column: 2 / -1; }
     }
+    @media (max-width: 1200px) {
+      .workspace { grid-template-columns: 1fr; }
+      .request-pane { min-height: 58vh; }
+      .data-pane { min-height: 58vh; }
+    }
   </style>
 </head>
 <body>
@@ -443,41 +513,53 @@
       <h1><span>Biryani Blitz</span>Outreach assistant</h1>
       <nav>
         <button type="button" class="nav-btn" id="btnOpenTracker">Outreach tracker</button>
-        <a href="/contacts.html">Contacts viewer</a>
+        <a href="/contacts.html" target="_blank" rel="noopener noreferrer">Open contacts tab ↗</a>
       </nav>
     </header>
 
-    <div class="chat-scroll" id="chat"></div>
+    <div class="workspace">
+      <section class="request-pane">
+        <div class="chat-scroll" id="chat"></div>
 
-    <div class="composer">
-      <div class="composer-inner panel">
-        <div class="msg bot" style="margin-bottom:0.75rem;border:none;background:transparent;padding:0;backdrop-filter:none;">
-          <div class="label">Configure run</div>
-          <p style="font-size:0.8rem;color:var(--muted);margin-bottom:0.75rem;">
-            Paste <strong>one school per line</strong>, or CSV: <code style="color:var(--accent);">name, city, entrepreneurship center</code>.
-            Be specific with names (e.g. campus or city) to improve search. Optional: set <code style="color:var(--accent);">GEMINI_RESOLVE_UNIVERSITY=1</code> on the server for extra AI name expansion (uses more API quota). Tick <strong>tiers</strong>, then send.
-          </p>
+        <div class="composer">
+          <div class="composer-inner panel">
+            <div class="msg bot" style="margin-bottom:0.75rem;border:none;background:transparent;padding:0;backdrop-filter:none;">
+              <div class="label">Configure run</div>
+              <p style="font-size:0.8rem;color:var(--muted);margin-bottom:0.75rem;">
+                Paste <strong>one school per line</strong>, or CSV: <code style="color:var(--accent);">name, city, entrepreneurship center</code>.
+                Be specific with names (e.g. campus or city) to improve search. Optional: set <code style="color:var(--accent);">GEMINI_RESOLVE_UNIVERSITY=1</code> on the server for extra AI name expansion (uses more API quota). Tick <strong>tiers</strong>, then send.
+              </p>
 
-          <label class="toggle">
-            <input type="checkbox" id="useBuiltIn" />
-            Use built-in 70-school list (ignores CSV)
-          </label>
+              <label class="toggle">
+                <input type="checkbox" id="useBuiltIn" />
+                Use built-in 70-school list (ignores CSV)
+              </label>
 
-          <label class="field">Schools (CSV or one per line)</label>
-          <textarea id="schoolsCsv" placeholder="New York University (NYU), New York, NY, Entrepreneurial Institute
+              <label class="field">Schools (CSV or one per line)</label>
+              <textarea id="schoolsCsv" placeholder="New York University (NYU), New York, NY, Entrepreneurial Institute
 UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
 
-          <label class="field">Contact tiers to find</label>
-          <div class="tier-grid" id="tierGrid"></div>
+              <label class="field">Contact tiers to find</label>
+              <div class="tier-grid" id="tierGrid"></div>
 
-          <div class="actions">
-            <button type="button" class="primary" id="btnSend">Send &amp; run</button>
-            <button type="button" class="ghost" id="btnStop" disabled>Stop</button>
-            <span class="status" id="statusLine">…</span>
+              <div class="actions">
+                <button type="button" class="primary" id="btnSend">Send &amp; run</button>
+                <button type="button" class="ghost" id="btnStop" disabled>Stop</button>
+                <span class="status" id="statusLine">…</span>
+              </div>
+              <div class="log-preview" id="logPreview"></div>
+            </div>
           </div>
-          <div class="log-preview" id="logPreview"></div>
         </div>
-      </div>
+      </section>
+
+      <section class="data-pane" aria-label="Contacts dashboard">
+        <div class="data-head">
+          <h2>Data dashboard</h2>
+          <a href="/contacts.html" target="_blank" rel="noopener noreferrer">Open full view ↗</a>
+        </div>
+        <iframe class="data-frame" src="/contacts.html" title="Contacts dashboard"></iframe>
+      </section>
     </div>
   </div>
 
