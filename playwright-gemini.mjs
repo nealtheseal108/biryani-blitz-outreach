@@ -238,35 +238,6 @@ async function searchGoogle(page, query) {
   return links;
 }
 
-function buildFallbackCampusUrls(universityName, maxPages) {
-  const raw = String(universityName || "")
-    .trim()
-    .replace(/[()]/g, " ");
-  if (!raw) return [];
-
-  const seeds = new Set();
-  // e.g. "UNC Chapel Hill" -> "unc.edu"
-  for (const tok of raw.split(/\s+/)) {
-    if (/^[A-Z]{2,8}$/.test(tok)) seeds.add(`${tok.toLowerCase()}.edu`);
-  }
-
-  const lower = raw.toLowerCase();
-  if (lower.includes("unc") || lower.includes("north carolina")) seeds.add("unc.edu");
-  if (lower.includes("berkeley")) seeds.add("berkeley.edu");
-  if (lower.includes("ucla")) seeds.add("ucla.edu");
-  if (lower.includes("upenn") || lower.includes("penn")) seeds.add("upenn.edu");
-
-  const out = [];
-  const commonPaths = ["", "/about", "/studentaffairs", "/students", "/dining", "/auxiliary-services"];
-  for (const host of seeds) {
-    for (const p of commonPaths) {
-      out.push(`https://www.${host}${p}`);
-      if (out.length >= maxPages) return out;
-    }
-  }
-  return out.slice(0, maxPages);
-}
-
 function isGenericCampusPage(url) {
   try {
     const u = new URL(url);
@@ -332,13 +303,7 @@ async function discoverUrls(browser, universityName, entrepreneurship, maxPages,
   if (nonGeneric.length > 0) deduped = nonGeneric;
   deduped = deduped.slice(0, maxPages);
   if (deduped.length === 0) {
-    const fallback = dedupeUrls(buildFallbackCampusUrls(universityName, maxPages))
-      .filter((u) => !isGenericCampusPage(u))
-      .slice(0, maxPages);
-    if (fallback.length) {
-      console.log(`  ↪ search empty; trying ${fallback.length} targeted campus fallback URL(s)`);
-      deduped = fallback;
-    }
+    console.log("  (search engines returned no usable URLs)");
   }
   return deduped;
 }
