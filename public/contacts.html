@@ -482,9 +482,70 @@
     margin-left: auto;
     letter-spacing: 0.05em;
   }
+
+  /* Biryani Blitz re-skin + no glass + typography direction */
+  body { cursor: none; }
+  body::before {
+    transform: translate(calc(var(--px, 0) * -8px), calc(var(--py, 0) * -8px));
+    transition: transform 0.12s linear;
+    background:
+      radial-gradient(ellipse 60% 50% at 14% 20%, rgba(255, 238, 222, 0.18), transparent 62%),
+      radial-gradient(ellipse 60% 50% at 84% 78%, rgba(250, 173, 117, 0.35), transparent 60%),
+      linear-gradient(150deg, #a14123 0%, #cd4d27 45%, #f15e22 100%);
+  }
+  body::after {
+    content: '';
+    position: fixed;
+    inset: -10%;
+    pointer-events: none;
+    z-index: 0;
+    transform: translate(calc(var(--px, 0) * 10px), calc(var(--py, 0) * 10px));
+    transition: transform 0.15s linear;
+    background: radial-gradient(ellipse 45% 35% at 50% 55%, rgba(255, 238, 222, 0.12), transparent 70%);
+  }
+  h1, .uni-name {
+    font-style: italic;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-stretch: expanded;
+  }
+  h1 span, .stat-label, .filter-btn {
+    font-style: italic;
+    font-stretch: condensed;
+  }
+  .stat-cell, .university-header, .contacts-wrap, input[type="search"], select, .filter-btn, .export-btn {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: none !important;
+    background: #2a140d !important;
+  }
+  .wrapper { z-index: 1; }
+  .cursor-ring, .cursor-dot {
+    position: fixed;
+    left: 0;
+    top: 0;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 2000;
+    border-radius: 999px;
+  }
+  .cursor-dot {
+    width: 8px;
+    height: 8px;
+    background: #ffeede;
+    box-shadow: 0 0 14px rgba(255, 238, 222, 0.5);
+  }
+  .cursor-ring {
+    width: 28px;
+    height: 28px;
+    border: 1.5px solid #faad75;
+    background: rgba(250, 173, 117, 0.14);
+  }
 </style>
 </head>
 <body>
+<div class="cursor-ring" id="cursorRing"></div>
+<div class="cursor-dot" id="cursorDot"></div>
 <div class="wrapper">
 
   <header>
@@ -931,6 +992,32 @@ async function bootstrap() {
 }
 
 bootstrap();
+
+(() => {
+  const ring = document.getElementById('cursorRing');
+  const dot = document.getElementById('cursorDot');
+  let tx = window.innerWidth / 2;
+  let ty = window.innerHeight / 2;
+  let rx = tx, ry = ty, dx = tx, dy = ty;
+  window.addEventListener('mousemove', (e) => {
+    tx = e.clientX;
+    ty = e.clientY;
+    const px = (e.clientX / window.innerWidth - 0.5) * 2;
+    const py = (e.clientY / window.innerHeight - 0.5) * 2;
+    document.body.style.setProperty('--px', String(px));
+    document.body.style.setProperty('--py', String(py));
+  });
+  const tick = () => {
+    rx += (tx - rx) * 0.14;
+    ry += (ty - ry) * 0.14;
+    dx += (tx - dx) * 0.35;
+    dy += (ty - dy) * 0.35;
+    ring.style.left = `${rx}px`; ring.style.top = `${ry}px`;
+    dot.style.left = `${dx}px`; dot.style.top = `${dy}px`;
+    requestAnimationFrame(tick);
+  };
+  tick();
+})();
 </script>
 </body>
 </html>

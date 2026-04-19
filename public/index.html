@@ -473,9 +473,93 @@
       .request-pane { min-height: 58vh; }
       .data-pane { min-height: 58vh; }
     }
+
+    /* Biryani Blitz re-skin: no glass, warm palette, italic/wide/condensed emphasis */
+    :root {
+      --bg: #a14123;
+      --accent: #f15e22;
+      --accent-dim: rgba(241, 94, 34, 0.22);
+      --text: #ffeede;
+      --muted: #fdc99f;
+    }
+    body {
+      cursor: none;
+      background: linear-gradient(140deg, #a14123 0%, #cd4d27 40%, #f15e22 100%);
+    }
+    body::before {
+      transform: translate(calc(var(--px, 0) * -8px), calc(var(--py, 0) * -8px));
+      transition: transform 0.12s linear;
+      background:
+        radial-gradient(ellipse 60% 50% at 14% 20%, rgba(255, 238, 222, 0.18), transparent 62%),
+        radial-gradient(ellipse 60% 50% at 84% 78%, rgba(250, 173, 117, 0.35), transparent 60%),
+        linear-gradient(150deg, #a14123 0%, #cd4d27 45%, #f15e22 100%);
+    }
+    body::after {
+      content: "";
+      position: fixed;
+      inset: -10%;
+      pointer-events: none;
+      z-index: 0;
+      transform: translate(calc(var(--px, 0) * 10px), calc(var(--py, 0) * 10px));
+      transition: transform 0.15s linear;
+      background: radial-gradient(ellipse 45% 35% at 50% 55%, rgba(255, 238, 222, 0.12), transparent 70%);
+    }
+    header h1,
+    .modal-header h2 {
+      font-style: italic;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      font-stretch: expanded;
+    }
+    header h1 span,
+    label.field {
+      font-style: italic;
+      font-stretch: condensed;
+      letter-spacing: 0.16em;
+    }
+    .request-pane, .data-pane, .panel, .composer-inner, .modal-glass {
+      background: #2a140d !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+      box-shadow: 0 14px 30px rgba(0, 0, 0, 0.24) !important;
+    }
+    textarea, input[type="text"], input[type="password"], input[type="number"], input[type="search"], .tracker-row select {
+      background: #1f0f0a !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+    button.ghost, header nav a, button.nav-btn {
+      background: #4b2216 !important;
+      box-shadow: none !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+    .cursor-ring, .cursor-dot {
+      position: fixed;
+      left: 0;
+      top: 0;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 2000;
+      border-radius: 999px;
+    }
+    .cursor-dot {
+      width: 8px;
+      height: 8px;
+      background: #ffeede;
+      box-shadow: 0 0 14px rgba(255, 238, 222, 0.5);
+    }
+    .cursor-ring {
+      width: 28px;
+      height: 28px;
+      border: 1.5px solid #faad75;
+      background: rgba(250, 173, 117, 0.14);
+    }
   </style>
 </head>
 <body>
+  <div class="cursor-ring" id="cursorRing"></div>
+  <div class="cursor-dot" id="cursorDot"></div>
   <div class="app">
     <header>
       <h1><span>Biryani Blitz</span>Outreach assistant</h1>
@@ -893,6 +977,32 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
       refreshStatus();
       refreshLogs();
     }, 1500);
+
+    (() => {
+      const ring = document.getElementById("cursorRing");
+      const dot = document.getElementById("cursorDot");
+      let tx = window.innerWidth / 2;
+      let ty = window.innerHeight / 2;
+      let rx = tx, ry = ty, dx = tx, dy = ty;
+      window.addEventListener("mousemove", (e) => {
+        tx = e.clientX;
+        ty = e.clientY;
+        const px = (e.clientX / window.innerWidth - 0.5) * 2;
+        const py = (e.clientY / window.innerHeight - 0.5) * 2;
+        document.body.style.setProperty("--px", String(px));
+        document.body.style.setProperty("--py", String(py));
+      });
+      const tick = () => {
+        rx += (tx - rx) * 0.14;
+        ry += (ty - ry) * 0.14;
+        dx += (tx - dx) * 0.35;
+        dy += (ty - dy) * 0.35;
+        ring.style.left = `${rx}px`; ring.style.top = `${ry}px`;
+        dot.style.left = `${dx}px`; dot.style.top = `${dy}px`;
+        requestAnimationFrame(tick);
+      };
+      tick();
+    })();
   </script>
 </body>
 </html>

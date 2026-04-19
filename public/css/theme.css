@@ -1,6 +1,7 @@
 /**
  * Helvetica Neue LT Pro — from licensed OTFs in /public/fonts/
- * Glass reference: ~30% white opacity + 25px backdrop blur + subtle light edge (glassmorphism)
+ * Biryani Blitz warm palette:
+ * ffeede fdc99f faad75 f78f38 f15e22 cd4d27 a14123
  */
 
 @font-face {
@@ -54,12 +55,19 @@
 :root {
   --font: "Helvetica Neue LT Pro", "Helvetica Neue", -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
-  /* NN/g–style glass: Background Blur on 30% Opacity (use 25px blur) */
-  --glass-surface: rgba(255, 255, 255, 0.3);
-  --glass-surface-soft: rgba(255, 255, 255, 0.22);
-  --glass-accent: rgba(255, 124, 56, 0.28);
-  --glass-blur: 25px;
-  --glass-border: rgba(255, 255, 255, 0.1);
-  /* Crisp top edge on frosted panels */
-  --glass-inset: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  --bb-0: #ffeede;
+  --bb-1: #fdc99f;
+  --bb-2: #faad75;
+  --bb-3: #f78f38;
+  --bb-4: #f15e22;
+  --bb-5: #cd4d27;
+  --bb-6: #a14123;
+
+  /* Keep old var names for compatibility, but make them non-glass surfaces. */
+  --glass-surface: #2a140d;
+  --glass-surface-soft: #3a1c12;
+  --glass-accent: #4b2216;
+  --glass-blur: 0px;
+  --glass-border: rgba(255, 238, 222, 0.18);
+  --glass-inset: none;
 }
