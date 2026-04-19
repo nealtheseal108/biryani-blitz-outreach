@@ -998,6 +998,25 @@ bootstrap();
 
 (() => {
   const ring = document.getElementById('cursorRing');
+  const embedded = window.top !== window.self;
+  if (embedded) {
+    ring.style.display = 'none';
+    window.addEventListener('mousemove', (e) => {
+      window.parent.postMessage(
+        {
+          type: 'bb-cursor-move',
+          x: e.clientX,
+          y: e.clientY,
+        },
+        '*'
+      );
+      const px = (e.clientX / window.innerWidth - 0.5) * 2;
+      const py = (e.clientY / window.innerHeight - 0.5) * 2;
+      document.body.style.setProperty('--px', String(px));
+      document.body.style.setProperty('--py', String(py));
+    });
+    return;
+  }
   let tx = window.innerWidth / 2;
   let ty = window.innerHeight / 2;
   let rx = tx, ry = ty;

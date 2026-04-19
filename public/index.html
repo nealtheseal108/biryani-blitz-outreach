@@ -1005,11 +1005,16 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
       });
       const frame = document.querySelector(".data-frame");
       if (frame) {
-        frame.addEventListener("mouseenter", () => {
-          ring.style.opacity = "0";
-        });
-        frame.addEventListener("mouseleave", () => {
-          ring.style.opacity = "1";
+        window.addEventListener("message", (ev) => {
+          const d = ev.data || {};
+          if (d.type !== "bb-cursor-move") return;
+          const rect = frame.getBoundingClientRect();
+          tx = rect.left + Number(d.x || 0);
+          ty = rect.top + Number(d.y || 0);
+          const px = (tx / window.innerWidth - 0.5) * 2;
+          const py = (ty / window.innerHeight - 0.5) * 2;
+          document.body.style.setProperty("--px", String(px));
+          document.body.style.setProperty("--py", String(py));
         });
       }
       const tick = () => {
