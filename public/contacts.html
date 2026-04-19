@@ -997,10 +997,13 @@ async function bootstrap() {
 bootstrap();
 
 (() => {
+  const embeddedByQuery = new URLSearchParams(window.location.search).get('embedded') === '1';
+  const embedded = embeddedByQuery || window.top !== window.self;
   const ring = document.getElementById('cursorRing');
-  const embedded = window.top !== window.self;
   if (embedded) {
-    ring.style.display = 'none';
+    if (ring) ring.remove();
+    document.body.style.cursor = 'none';
+    document.documentElement.style.cursor = 'none';
     window.addEventListener('mousemove', (e) => {
       window.parent.postMessage(
         {
