@@ -636,6 +636,7 @@ let uniRankMap = {};
 /** @type {Record<string, boolean>} */
 let contactChecks = {};
 let checkSaveTimer = null;
+let emptyServerPullStreak = 0;
 
 /** Unique key for Done checkbox + persistence: real email when present, else university+name. */
 function stableContactKey(c) {
@@ -978,6 +979,12 @@ async function pullContactsFromServer() {
   const data = await r.json();
   if (!Array.isArray(data)) return;
   const next = data.map(normalizeContact);
+  if (next.length === 0 && allContacts.length > 0) {
+    emptyServerPullStreak += 1;
+    if (emptyServerPullStreak < 3) return;
+  } else {
+    emptyServerPullStreak = 0;
+  }
   if (contactListSignature(next) === contactListSignature(allContacts) && next.length === allContacts.length) {
     return;
   }

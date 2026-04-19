@@ -127,6 +127,14 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+function atomicWriteJson(targetPath, value) {
+  const dir = path.dirname(targetPath);
+  fs.mkdirSync(dir, { recursive: true });
+  const tmp = path.join(dir, `.${path.basename(targetPath)}.tmp-${process.pid}-${Date.now()}`);
+  fs.writeFileSync(tmp, JSON.stringify(value, null, 2), "utf8");
+  fs.renameSync(tmp, targetPath);
+}
+
 async function withTimeout(promise, ms, label) {
   let timer = null;
   const timeout = new Promise((_, reject) => {
@@ -931,6 +939,68 @@ function dedupeContactsByEmail(rows) {
   return out;
 }
 
+function normalizeEmail(s) {
+  return String(s || "").trim().toLowerCase();
+}
+
+function isContactRelevantByKeywords(text) {
+  const t = String(text || "").toLowerCase();
+  if (!t) return false;
+  return /student|union|dining|auxiliar|entrepreneur|innovation|incubat|startup|government|affairs|life|multicultural|sustainab|food|vendor|ehs|health|safety|permit|campus|university|college|director|coordinator|dean|vp|vice president|manager/.test(
+    t
+  );
+}
+
+async function fetchSearchSnippet(query) {
+  const enc = encodeURIComponent(query);
+  const resp = await withTimeout(
+    fetch(`https://www.bing.com/search?q=${enc}&count=5`),
+    10000,
+    "Bing verify search"
+  );
+  if (!resp.ok) return "";
+  const html = await resp.text();
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text.slice(0, 5000);
+}
+
+async function verifyContactsRelevance(rows, universityName) {
+  const uni = String(universityName || "").trim();
+  const out = [];
+  let kept = 0;
+  let dropped = 0;
+  for (const c of rows || []) {
+    const email = normalizeEmail(c.email);
+    if (!email || !email.includes("@")) continue;
+    const localEvidence = [c.name, c.title, c.department, c.tier_label, c.source_url, c.university]
+      .filter(Boolean)
+      .join(" ");
+    let relevant = isContactRelevantByKeywords(localEvidence);
+    if (!relevant) {
+      try {
+        const snippet = await fetchSearchSnippet(`${email} ${uni} university`);
+        relevant = isContactRelevantByKeywords(snippet);
+      } catch {
+        // Keep on lookup failure so we don't accidentally drop legitimate contacts.
+        relevant = true;
+      }
+    }
+    if (relevant) {
+      kept++;
+      out.push(c);
+    } else {
+      dropped++;
+    }
+  }
+  console.log(`      ↪ relevance filter: kept ${kept}, dropped ${dropped}`);
+  return out;
+}
+
 async function processUrls(browser, urls, universityLabel, allContacts, tierFocus) {
   for (const url of urls) {
     console.log(`    → ${url}`);
@@ -966,8 +1036,9 @@ async function processUrls(browser, urls, universityLabel, allContacts, tierFocu
       university: universityLabel,
       tier_label: c.tier ? `Tier ${c.tier}` : null,
     }));
-    allContacts.push(...withMeta);
-    console.log(`      ✓ +${contacts.length} contact(s)`);
+    const relevant = await verifyContactsRelevance(withMeta, universityLabel);
+    allContacts.push(...relevant);
+    console.log(`      ✓ +${relevant.length} relevant contact(s)`);
   }
 }
 
@@ -1037,7 +1108,7 @@ async function runBatch(opts) {
       }
 
       const deduped = dedupeContactsByEmail(all);
-      fs.writeFileSync(opts.out, JSON.stringify(deduped, null, 2), "utf8");
+      atomicWriteJson(opts.out, deduped);
       console.log(`  💾 saved ${deduped.length} unique emails → ${opts.out}`);
 
       await sleep(opts.delayMs);
@@ -1047,7 +1118,7 @@ async function runBatch(opts) {
   }
 
   const final = dedupeContactsByEmail(all);
-  fs.writeFileSync(opts.out, JSON.stringify(final, null, 2), "utf8");
+  atomicWriteJson(opts.out, final);
   console.log(`\n✅ Done. ${final.length} unique contacts → ${opts.out}`);
 }
 
@@ -1060,7 +1131,7 @@ async function runSingle(opts) {
   } finally {
     await browser.close();
   }
-  fs.writeFileSync(opts.out, JSON.stringify(all, null, 2), "utf8");
+  atomicWriteJson(opts.out, all);
   console.log(`\nWrote ${all.length} contacts → ${opts.out}`);
 }
 
