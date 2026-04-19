@@ -52,7 +52,21 @@
   font-display: swap;
 }
 
-/* Style aliases so UI can intentionally lean Ex/ExO/CnO-like via stretch+italic */
+/* BB Ex — Helvetica Neue LT Pro Extended */
+@font-face {
+  font-family: "BB Ex";
+  font-weight: 300;
+  font-style: normal;
+  src: url("/fonts/HelveticaNeueLTPro-LtEx.otf") format("opentype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "BB Ex";
+  font-weight: 400;
+  font-style: normal;
+  src: url("/fonts/HelveticaNeueLTPro-Ex.otf") format("opentype");
+  font-display: swap;
+}
 @font-face {
   font-family: "BB Ex";
   font-weight: 500;
@@ -60,12 +74,55 @@
   src: url("/fonts/HelveticaNeueLTPro-MdEx.otf") format("opentype");
   font-display: swap;
 }
+@font-face {
+  font-family: "BB Ex";
+  font-weight: 600;
+  font-style: normal;
+  src: url("/fonts/HelveticaNeueLTPro-MdEx.otf") format("opentype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "BB Ex";
+  font-weight: 700;
+  font-style: normal;
+  src: url("/fonts/HelveticaNeueLTPro-BdEx.otf") format("opentype");
+  font-display: swap;
+}
 
+/* BB ExO — Helvetica Neue LT Pro Extended Oblique */
+@font-face {
+  font-family: "BB ExO";
+  font-weight: 300;
+  font-style: normal;
+  src: url("/fonts/HelveticaNeueLTPro-LtExO.otf") format("opentype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "BB ExO";
+  font-weight: 400;
+  font-style: normal;
+  src: url("/fonts/HelveticaNeueLTPro-ExO.otf") format("opentype");
+  font-display: swap;
+}
 @font-face {
   font-family: "BB ExO";
   font-weight: 500;
-  font-style: italic;
+  font-style: normal;
   src: url("/fonts/HelveticaNeueLTPro-MdExO.otf") format("opentype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "BB ExO";
+  font-weight: 600;
+  font-style: normal;
+  src: url("/fonts/HelveticaNeueLTPro-MdExO.otf") format("opentype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "BB ExO";
+  font-weight: 700;
+  font-style: normal;
+  src: url("/fonts/HelveticaNeueLTPro-BdExO.otf") format("opentype");
   font-display: swap;
 }
 

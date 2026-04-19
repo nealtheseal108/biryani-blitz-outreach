@@ -31,6 +31,8 @@ const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "meta-llama/llama-3.1-8b-instruct:free";
 const SEARCH_LLM_TERMS = process.env.SEARCH_LLM_TERMS !== "0";
 const MULTI_STAGE_SEARCH = process.env.MULTI_STAGE_SEARCH !== "0";
+/** Expand "UT Austin" → full official name for search + contact rows (OpenRouter). Set CANONICAL_UNIVERSITY_NAMES=0 to disable. */
+const CANONICAL_UNIVERSITY_NAMES = process.env.CANONICAL_UNIVERSITY_NAMES !== "0";
 
 const DEFAULT_DATA = path.join("data", "universities.json");
 
@@ -888,6 +890,66 @@ Rules:
   };
 }
 
+/** Quick OpenRouter pass: nicknames / abbreviations → official name + search phrase (for Playwright + dashboard). */
+async function resolveUniversityCanonicalOpenRouter(u) {
+  if (!CANONICAL_UNIVERSITY_NAMES || !OPENROUTER_API_KEY) return null;
+  const name = String(u.name || "").trim();
+  if (!name) return null;
+  const city = String(u.city || "").trim();
+  const prompt = `The user typed a U.S. college or university reference. Return the official full institution name and a good web-search phrase for finding that campus.
+
+Input: ${JSON.stringify(name)}
+City/region hint (optional): ${JSON.stringify(city)}
+
+Return ONLY JSON (no markdown):
+{
+  "canonical_name": "Official full name, e.g. University of Texas at Austin",
+  "search_name": "Phrase for Google/Bing — use full name when possible; add city if disambiguation is needed"
+}
+
+Rules:
+- Expand common abbreviations: UT Austin → University of Texas at Austin; UNC Chapel Hill → University of North Carolina at Chapel Hill when the Chapel Hill campus is meant.
+- If input is ambiguous (e.g. "UNC" with no city), prefer the flagship Chapel Hill campus unless the hint suggests otherwise.
+- search_name must be under 120 characters.`;
+
+  try {
+    const resp = await withTimeout(
+      fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: OPENROUTER_MODEL,
+          temperature: 0.1,
+          messages: [
+            { role: "system", content: "Return only strict JSON objects." },
+            { role: "user", content: prompt },
+          ],
+        }),
+      }),
+      12000,
+      "OpenRouter canonical university"
+    );
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const text = data?.choices?.[0]?.message?.content || "";
+    const parsed = extractJSONObject(text);
+    if (!parsed || typeof parsed.canonical_name !== "string") return null;
+    const canonical_name = parsed.canonical_name.trim() || name;
+    const search_name = String(parsed.search_name || canonical_name).trim() || name;
+    return {
+      canonical_name,
+      search_name,
+      entrepreneurship: u.entrepreneurship,
+      disambiguation: "",
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function resolveTierTerminology({ universityName, entrepreneurship, tiers }) {
   if (!SEARCH_LLM_TERMS || !tiers?.length) return {};
   const name = String(universityName || "").trim();
@@ -1309,7 +1371,10 @@ async function runBatch(opts) {
   console.log(`LLM extraction provider: ${LLM_PROVIDER}${OPENROUTER_API_KEY ? " (OpenRouter key detected)" : ""}`);
   console.log(`LLM search terminology aliases: ${SEARCH_LLM_TERMS ? "on" : "off (set SEARCH_LLM_TERMS=1 to enable)"}`);
   console.log(
-    `AI university name expansion: ${batchOpts.resolveUniversity ? "on (extra Gemini call per school)" : "off (set GEMINI_RESOLVE_UNIVERSITY=1 or --resolve-university to enable)"}\n`
+    `Canonical university names (OpenRouter): ${CANONICAL_UNIVERSITY_NAMES && OPENROUTER_API_KEY ? "on" : CANONICAL_UNIVERSITY_NAMES ? "off (add OPENROUTER_API_KEY)" : "off (set CANONICAL_UNIVERSITY_NAMES=0 to disable)"}`
+  );
+  console.log(
+    `AI university name expansion (Gemini): ${batchOpts.resolveUniversity ? "on (extra Gemini call per school)" : "off (set GEMINI_RESOLVE_UNIVERSITY=1 or --resolve-university to enable)"}\n`
   );
 
   let all = [];
@@ -1329,15 +1394,31 @@ async function runBatch(opts) {
     for (let i = 0; i < list.length; i++) {
       const u = list[i];
       let resolved = null;
+      if (CANONICAL_UNIVERSITY_NAMES && OPENROUTER_API_KEY) {
+        resolved = await resolveUniversityCanonicalOpenRouter(u);
+      }
       if (batchOpts.resolveUniversity) {
-        resolved = await resolveUniversityWithGemini(u);
+        const g = await resolveUniversityWithGemini(u);
+        if (g) {
+          resolved = {
+            ...(resolved || {}),
+            ...g,
+            canonical_name: g.canonical_name || resolved?.canonical_name,
+            search_name: g.search_name || resolved?.search_name,
+            entrepreneurship: g.entrepreneurship || resolved?.entrepreneurship || u.entrepreneurship,
+            disambiguation: g.disambiguation || resolved?.disambiguation || "",
+          };
+        }
       }
       const displayName = resolved?.canonical_name || u.name;
-      const searchName = resolved?.search_name || u.name;
+      const searchName = resolved?.search_name || resolved?.canonical_name || u.name;
       const entForSearch = resolved?.entrepreneurship || u.entrepreneurship || "Entrepreneurship Center";
 
       const label = `${i + 1}/${list.length} ${displayName}`;
       console.log(`\n━━ ${label} ━━`);
+      if (String(u.name || "").trim() !== String(displayName).trim()) {
+        console.log(`  → Canonical: "${displayName}" (you entered: "${u.name}")`);
+      }
       if (resolved && (resolved.search_name !== u.name || resolved.canonical_name !== u.name)) {
         console.log(
           `  → Search as: "${searchName}"` + (resolved.disambiguation ? ` (${resolved.disambiguation})` : "")

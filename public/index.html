@@ -90,7 +90,7 @@
       gap: 0.6rem;
       padding: 0.8rem 0.95rem;
       border-bottom: 1px solid var(--glass-border);
-      background: rgba(255, 255, 255, 0.04);
+      background: #2a140d;
     }
 
     .data-head h2 {
@@ -164,19 +164,6 @@
       color: var(--accent);
       margin-bottom: 0.15rem;
     }
-    header nav a {
-      font-size: 0.75rem;
-      color: var(--text);
-      text-decoration: none;
-      padding: 0.35rem 0.65rem;
-      border-radius: 999px;
-      border: 1px solid var(--glass-border);
-      background: var(--glass-surface);
-      backdrop-filter: blur(var(--glass-blur));
-      -webkit-backdrop-filter: blur(var(--glass-blur));
-      box-shadow: var(--glass-inset);
-    }
-    header nav a:hover { color: var(--text); border-color: rgba(255,124,56,0.35); }
 
     .request-body {
       flex: 1;
@@ -310,26 +297,26 @@
       font-weight: 600;
       padding: 0.55rem 1.25rem;
       border-radius: 999px;
-      border: 1px solid rgba(255,124,56,0.45);
-      background: linear-gradient(180deg, rgba(255,124,56,0.35), rgba(255,124,56,0.15));
+      border: 1px solid #cd4d27;
+      background: #f15e22;
       color: #fff;
       cursor: pointer;
+      box-shadow: none;
     }
+    button.primary:hover:not(:disabled) { background: #f78f38; border-color: #f78f38; }
     button.primary:disabled { opacity: 0.45; cursor: not-allowed; }
     button.ghost {
       font-family: var(--font);
       font-size: 0.78rem;
       padding: 0.5rem 1rem;
       border-radius: 999px;
-      border: 1px solid var(--glass-border);
-      background: rgba(255, 255, 255, 0.12);
-      backdrop-filter: blur(var(--glass-blur));
-      -webkit-backdrop-filter: blur(var(--glass-blur));
+      border: 1px solid rgba(255, 238, 222, 0.22);
+      background: #4b2216;
       color: var(--text);
       cursor: pointer;
-      box-shadow: var(--glass-inset);
+      box-shadow: none;
     }
-    button.ghost:hover { color: var(--text); background: rgba(255, 255, 255, 0.18); }
+    button.ghost:hover:not(:disabled) { background: #5c2a1c; border-color: rgba(255, 238, 222, 0.35); }
 
     .status {
       font-size: 0.72rem;
@@ -362,156 +349,6 @@
       -webkit-backdrop-filter: blur(12px);
     }
 
-    header nav { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; justify-content: flex-end; }
-    button.nav-btn {
-      font-family: var(--font);
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: var(--text);
-      text-decoration: none;
-      padding: 0.35rem 0.75rem;
-      border-radius: 999px;
-      border: 1px solid rgba(255, 124, 56, 0.4);
-      background: var(--glass-accent);
-      backdrop-filter: blur(var(--glass-blur));
-      -webkit-backdrop-filter: blur(var(--glass-blur));
-      box-shadow: var(--glass-inset);
-      cursor: pointer;
-    }
-    button.nav-btn:hover {
-      border-color: rgba(255, 124, 56, 0.55);
-      background: rgba(255, 124, 56, 0.38);
-    }
-
-    .modal-backdrop {
-      position: fixed;
-      inset: 0;
-      z-index: 1000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 1rem;
-      background: rgba(6, 8, 16, 0.55);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-      opacity: 1;
-      transition: opacity 0.2s ease;
-    }
-    .modal-backdrop.hidden { display: none; }
-    .modal-glass {
-      width: 100%;
-      max-width: 640px;
-      max-height: min(88vh, 720px);
-      display: flex;
-      flex-direction: column;
-      border-radius: var(--radius);
-      border: 1px solid var(--glass-border);
-      background: var(--glass-surface);
-      backdrop-filter: blur(var(--glass-blur));
-      -webkit-backdrop-filter: blur(var(--glass-blur));
-      box-shadow: var(--glass-inset), 0 24px 80px rgba(0, 0, 0, 0.35);
-    }
-    .modal-header {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 0.75rem;
-      padding: 1rem 1.15rem;
-      border-bottom: 1px solid var(--glass-border);
-    }
-    .modal-header h2 {
-      font-size: 1rem;
-      font-weight: 600;
-      letter-spacing: -0.02em;
-    }
-    .modal-header h2 span {
-      display: block;
-      font-size: 0.58rem;
-      font-weight: 600;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--accent);
-      margin-bottom: 0.2rem;
-    }
-    .modal-lead {
-      font-size: 0.78rem;
-      color: var(--muted);
-      line-height: 1.45;
-      padding: 0.75rem 1.15rem 0;
-    }
-    .modal-body-scroll {
-      flex: 1;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      padding: 0 1.15rem 0.75rem;
-      min-height: 0;
-    }
-    .modal-body-scroll input[type="search"] {
-      margin-bottom: 0.5rem;
-    }
-    .tracker-toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 0.45rem;
-      margin-bottom: 0.5rem;
-    }
-    .tracker-toolbar .status { margin: 0; flex: 1; min-width: 120px; font-size: 0.7rem; }
-    .tracker-list {
-      flex: 1;
-      overflow-y: auto;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--glass-border);
-      background: rgba(255, 255, 255, 0.08);
-      backdrop-filter: blur(var(--glass-blur));
-      -webkit-backdrop-filter: blur(var(--glass-blur));
-    }
-    .tracker-row {
-      display: grid;
-      grid-template-columns: 28px 1fr minmax(140px, 1fr);
-      gap: 0.5rem;
-      align-items: center;
-      padding: 0.5rem 0.65rem;
-      border-bottom: 1px solid rgba(255,255,255,0.05);
-      font-size: 0.78rem;
-    }
-    .tracker-row:last-child { border-bottom: none; }
-    .tracker-row:hover { background: rgba(255,255,255,0.03); }
-    .tracker-row input[type="checkbox"] { accent-color: var(--accent); width: 1rem; height: 1rem; justify-self: center; }
-    .tracker-name { color: var(--text); line-height: 1.3; }
-    .tracker-name small { display: block; font-size: 0.65rem; color: var(--muted); margin-top: 0.15rem; }
-    .tracker-row select {
-      font-family: var(--font);
-      font-size: 0.72rem;
-      padding: 0.4rem 0.45rem;
-      border-radius: 8px;
-      border: 1px solid var(--glass-border);
-      background: rgba(0, 0, 0, 0.22);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      color: var(--text);
-      width: 100%;
-      cursor: pointer;
-    }
-    .tracker-row select:focus {
-      outline: none;
-      border-color: rgba(255,124,56,0.45);
-    }
-    .tracker-footer {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      padding: 0.75rem 1.15rem 1rem;
-      border-top: 1px solid var(--glass-border);
-    }
-    @media (max-width: 520px) {
-      .tracker-row {
-        grid-template-columns: 24px 1fr;
-        grid-template-rows: auto auto;
-      }
-      .tracker-row select { grid-column: 2 / -1; }
-    }
     @media (max-width: 1200px) {
       .workspace { grid-template-columns: 1fr; }
       .request-pane { min-height: 58vh; }
@@ -548,8 +385,7 @@
       transition: transform 0.15s linear;
       background: radial-gradient(ellipse 45% 35% at 50% 55%, rgba(255, 238, 222, 0.12), transparent 70%);
     }
-    header h1,
-    .modal-header h2 {
+    header h1 {
       font-family: var(--font-exo);
       font-style: italic;
       letter-spacing: 0.07em;
@@ -566,31 +402,35 @@
     .data-head h2,
     .status,
     .eta-status,
-    .toggle,
-    .tracker-name,
-    .tracker-row select {
+    .toggle {
       font-family: var(--font-cno);
       font-style: italic;
     }
-    .actions button,
-    .nav-btn,
-    header nav a {
+    .actions button {
       font-family: var(--font-ex);
       letter-spacing: 0.06em;
     }
-    .request-pane, .data-pane, .panel, .composer-inner, .modal-glass {
+    .request-pane, .data-pane, .panel, .composer-inner {
       background: #2a140d !important;
       backdrop-filter: none !important;
       -webkit-backdrop-filter: none !important;
       box-shadow: 0 14px 30px rgba(0, 0, 0, 0.24) !important;
     }
-    textarea, input[type="text"], input[type="password"], input[type="number"], input[type="search"], .tracker-row select {
+    textarea, input[type="text"], input[type="password"], input[type="number"], input[type="search"] {
       background: #1f0f0a !important;
       backdrop-filter: none !important;
       -webkit-backdrop-filter: none !important;
     }
-    button.ghost, header nav a, button.nav-btn {
+    button.ghost {
       background: #4b2216 !important;
+      border-color: rgba(255, 238, 222, 0.22) !important;
+      box-shadow: none !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+    button.primary {
+      background: #f15e22 !important;
+      border-color: #cd4d27 !important;
       box-shadow: none !important;
       backdrop-filter: none !important;
       -webkit-backdrop-filter: none !important;
@@ -623,10 +463,6 @@
         <h1><span>Biryani Blitz</span>Outreach assistant</h1>
         <span class="build-tag">build 1a79563</span>
       </div>
-      <nav>
-        <button type="button" class="nav-btn" id="btnOpenTracker">Outreach tracker</button>
-        <a href="/contacts.html" target="_blank" rel="noopener noreferrer">Open contacts tab ↗</a>
-      </nav>
     </header>
 
     <div class="workspace">
@@ -671,30 +507,6 @@ UC Berkeley"></textarea>
         </div>
         <iframe class="data-frame" src="/contacts.html?embedded=1" title="Contacts dashboard"></iframe>
       </section>
-    </div>
-  </div>
-
-  <div id="trackerModal" class="modal-backdrop hidden" aria-hidden="true">
-    <div class="modal-glass" role="dialog" aria-modal="true" aria-labelledby="trackerTitle">
-      <div class="modal-header">
-        <h2 id="trackerTitle"><span>Biryani Blitz</span>Outreach tracker</h2>
-        <button type="button" class="ghost" id="btnCloseTracker">Close</button>
-      </div>
-      <p class="modal-lead">
-        Check off universities you’ve already contacted. The <strong>dropdown</strong> is your pipeline stage. Everything stays in this dashboard: saved in the browser and synced to the server when available.
-      </p>
-      <div class="modal-body-scroll">
-        <input type="search" id="trackerSearch" placeholder="Filter universities…" autocomplete="off" />
-        <div class="tracker-toolbar">
-          <button type="button" class="ghost" id="btnCheckShown">Check all shown</button>
-          <button type="button" class="ghost" id="btnUncheckShown">Uncheck all shown</button>
-          <span class="status" id="trackerStats"></span>
-        </div>
-        <div class="tracker-list" id="trackerList"></div>
-      </div>
-      <div class="tracker-footer">
-        <span class="status" style="margin:0;">No file export — data is stored here and on the server.</span>
-      </div>
     </div>
   </div>
 
@@ -814,7 +626,7 @@ UC Berkeley"></textarea>
           if (/\s→\shttps?:\/\//.test(clean)) transparent.push(clean);
           // Also keep high-signal lifecycle/error lines so panel never appears silently stuck.
           if (
-            /Tier filter:|LLM extraction provider:|LLM search terminology aliases:|AI university name expansion:|Multi-stage search:|campus office lookup|→ offices:|People \/ about crawl:|↪ crawl hub:|━━\s*\d+\/\d+|\[search \d+\/\d+\]|Search terminology aliases:|Scoped URLs for|Tier URL coverage:|Google:|Bing:|DuckDuckGo:|search empty;|Found \d+ page\(s\) to scrape|no result URLs|saved \d+ unique emails|Done\.|Process exited|Search failed|Gemini:|OpenRouter|quota|error|failed/i.test(
+            /Tier filter:|LLM extraction provider:|LLM search terminology aliases:|AI university name expansion:|Multi-stage search:|campus office lookup|→ offices:|→ Canonical:|People \/ about crawl:|↪ crawl hub:|━━\s*\d+\/\d+|\[search \d+\/\d+\]|Search terminology aliases:|Scoped URLs for|Tier URL coverage:|Google:|Bing:|DuckDuckGo:|search empty;|Found \d+ page\(s\) to scrape|no result URLs|saved \d+ unique emails|Done\.|Process exited|Search failed|Gemini:|OpenRouter|quota|error|failed/i.test(
               s
             )
           ) {
@@ -874,180 +686,6 @@ UC Berkeley"></textarea>
       document.getElementById("schoolsCsv").disabled = document.getElementById("useBuiltIn").checked;
     };
     document.getElementById("schoolsCsv").disabled = false;
-
-    // —— Outreach tracker (glass modal): contacted + stage dropdown ——
-    const LS_KEY = "bb_outreach_tracker_v1";
-    const STAGES = [
-      { value: "none", label: "Not started" },
-      { value: "queued", label: "Queued to email" },
-      { value: "emailed", label: "Emailed" },
-      { value: "follow_up", label: "Follow-up sent" },
-      { value: "replied", label: "They replied" },
-      { value: "meeting", label: "Meeting / call set" },
-      { value: "pilot", label: "Pilot / trial" },
-      { value: "closed_won", label: "Closed — yes" },
-      { value: "closed_no", label: "Closed — no" },
-      { value: "paused", label: "Paused" },
-    ];
-
-    let uniList = [];
-    let trackerState = {};
-    let trackerSaveTimer = null;
-
-    function getTrackerEntry(name) {
-      const cur = trackerState[name];
-      if (cur && typeof cur === "object") {
-        return {
-          contacted: !!cur.contacted,
-          stage: typeof cur.stage === "string" ? cur.stage : "none",
-        };
-      }
-      return { contacted: false, stage: "none" };
-    }
-
-    function setTrackerEntry(name, patch) {
-      const prev = getTrackerEntry(name);
-      trackerState[name] = { ...prev, ...patch };
-      persistTracker();
-    }
-
-    function persistTracker() {
-      try {
-        localStorage.setItem(LS_KEY, JSON.stringify(trackerState));
-      } catch {
-        /* empty */
-      }
-      clearTimeout(trackerSaveTimer);
-      trackerSaveTimer = setTimeout(async () => {
-        try {
-          await fetch("/api/outreach-state", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(trackerState),
-          });
-        } catch {
-          /* server optional */
-        }
-      }, 450);
-    }
-
-    async function loadTrackerBootstrap() {
-      let local = {};
-      try {
-        local = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
-      } catch {
-        local = {};
-      }
-      let server = {};
-      try {
-        const r = await fetch("/api/outreach-state");
-        if (r.ok) server = await r.json();
-      } catch {
-        /* empty */
-      }
-      trackerState = { ...server, ...local };
-      try {
-        localStorage.setItem(LS_KEY, JSON.stringify(trackerState));
-      } catch {
-        /* empty */
-      }
-    }
-
-    async function ensureUniversities() {
-      if (uniList.length) return;
-      const r = await fetch("/api/universities");
-      if (!r.ok) throw new Error("Could not load universities list");
-      uniList = await r.json();
-    }
-
-    function trackerFilterList() {
-      const q = (document.getElementById("trackerSearch").value || "").toLowerCase().trim();
-      return uniList.filter((u) => {
-        const name = (u.name || "").toLowerCase();
-        const city = (u.city || "").toLowerCase();
-        return !q || name.includes(q) || city.includes(q);
-      });
-    }
-
-    function renderTrackerTable() {
-      const listEl = document.getElementById("trackerList");
-      const filtered = trackerFilterList();
-      const contactedCount = filtered.filter((u) => getTrackerEntry(u.name).contacted).length;
-      document.getElementById("trackerStats").textContent =
-        filtered.length + " shown · " + contactedCount + " marked contacted";
-
-      listEl.innerHTML = filtered
-        .map((u) => {
-          const e = getTrackerEntry(u.name);
-          const sel = STAGES.map((s) => {
-            const selAttr = s.value === e.stage ? " selected" : "";
-            return `<option value="${s.value}"${selAttr}>${s.label.replace(/</g, "&lt;")}</option>`;
-          }).join("");
-          const city = u.city ? `<small>${u.city.replace(/</g, "&lt;")}</small>` : "";
-          return (
-            `<div class="tracker-row" data-uni="${encodeURIComponent(u.name)}">` +
-            `<input type="checkbox" class="tr-contacted" ${e.contacted ? "checked" : ""} aria-label="Contacted ${u.name.replace(/"/g, "&quot;")}" />` +
-            `<div class="tracker-name">${u.name.replace(/</g, "&lt;")}${city}</div>` +
-            `<select class="tr-stage" aria-label="Stage for ${u.name.replace(/"/g, "&quot;")}">${sel}</select>` +
-            `</div>`
-          );
-        })
-        .join("");
-
-      listEl.querySelectorAll(".tr-contacted").forEach((cb) => {
-        cb.addEventListener("change", (ev) => {
-          const row = ev.target.closest(".tracker-row");
-          const name = decodeURIComponent(row.getAttribute("data-uni"));
-          setTrackerEntry(name, { contacted: ev.target.checked });
-        });
-      });
-      listEl.querySelectorAll(".tr-stage").forEach((sel) => {
-        sel.addEventListener("change", (ev) => {
-          const row = ev.target.closest(".tracker-row");
-          const name = decodeURIComponent(row.getAttribute("data-uni"));
-          setTrackerEntry(name, { stage: ev.target.value });
-        });
-      });
-    }
-
-    const trackerModal = document.getElementById("trackerModal");
-
-    async function openTrackerModal() {
-      try {
-        await ensureUniversities();
-        await loadTrackerBootstrap();
-        document.getElementById("trackerSearch").value = "";
-        renderTrackerTable();
-        trackerModal.classList.remove("hidden");
-        trackerModal.setAttribute("aria-hidden", "false");
-      } catch (err) {
-        alert(err.message || String(err));
-      }
-    }
-
-    function closeTrackerModal() {
-      trackerModal.classList.add("hidden");
-      trackerModal.setAttribute("aria-hidden", "true");
-    }
-
-    document.getElementById("btnOpenTracker").addEventListener("click", openTrackerModal);
-    document.getElementById("btnCloseTracker").addEventListener("click", closeTrackerModal);
-    trackerModal.addEventListener("click", (e) => {
-      if (e.target === trackerModal) closeTrackerModal();
-    });
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !trackerModal.classList.contains("hidden")) closeTrackerModal();
-    });
-
-    document.getElementById("trackerSearch").addEventListener("input", renderTrackerTable);
-    document.getElementById("btnCheckShown").addEventListener("click", () => {
-      trackerFilterList().forEach((u) => setTrackerEntry(u.name, { contacted: true }));
-      renderTrackerTable();
-    });
-    document.getElementById("btnUncheckShown").addEventListener("click", () => {
-      trackerFilterList().forEach((u) => setTrackerEntry(u.name, { contacted: false }));
-      renderTrackerTable();
-    });
 
     refreshStatus();
     refreshLogs();
