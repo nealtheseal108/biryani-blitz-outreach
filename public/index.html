@@ -616,8 +616,7 @@
             <div class="composer-inner panel">
               <div style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--accent);margin-bottom:0.45rem;font-weight:600;">Configure run</div>
               <p style="font-size:0.8rem;color:var(--muted);margin-bottom:0.75rem;">
-                Paste <strong>one school per line</strong>, or CSV: <code style="color:var(--accent);">name, city, entrepreneurship center</code>.
-                Be specific with names (e.g. campus or city) to improve search. Optional: set <code style="color:var(--accent);">GEMINI_RESOLVE_UNIVERSITY=1</code> on the server for extra AI name expansion (uses more API quota). Tick <strong>tiers</strong>, then send.
+                Paste <strong>school names only</strong>, one per line. Tick <strong>tiers</strong>, then send.
               </p>
 
               <label class="toggle">
@@ -625,9 +624,10 @@
                 Use built-in 70-school list (ignores CSV)
               </label>
 
-              <label class="field">Schools (CSV or one per line)</label>
-              <textarea id="schoolsCsv" placeholder="New York University (NYU), New York, NY, Entrepreneurial Institute
-UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
+              <label class="field">Schools (one per line)</label>
+              <textarea id="schoolsCsv" placeholder="University of North Carolina at Chapel Hill
+New York University
+UC Berkeley"></textarea>
 
               <label class="field">Contact tiers to find</label>
               <div class="tier-grid" id="tierGrid"></div>
