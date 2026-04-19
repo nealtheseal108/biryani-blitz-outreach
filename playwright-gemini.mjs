@@ -11,6 +11,7 @@
  *   LLM_PROVIDER=gemini|openrouter — extraction provider (default gemini)
  *   OPENROUTER_API_KEY — enables OpenRouter extraction fallback
  *   OPENROUTER_MODEL — default meta-llama/llama-3.1-8b-instruct:free
+ *   MULTI_STAGE_SEARCH=0 — disable per-category office resolution + people/directory crawl (default on)
  *
  * Examples:
  *   npm run scrape:batch -- --max 3
@@ -29,8 +30,22 @@ const LLM_PROVIDER = (process.env.LLM_PROVIDER || "gemini").toLowerCase();
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "meta-llama/llama-3.1-8b-instruct:free";
 const SEARCH_LLM_TERMS = process.env.SEARCH_LLM_TERMS !== "0";
+const MULTI_STAGE_SEARCH = process.env.MULTI_STAGE_SEARCH !== "0";
 
 const DEFAULT_DATA = path.join("data", "universities.json");
+
+/** Short hints for LLM: real campus office / program names (e.g. Carolina Union, Division of Student Affairs). */
+const TIER_OFFICE_HINT = {
+  1: "student union, campus commercial services, auxiliary enterprises, event services",
+  2: "student affairs, division of student affairs, dean of students, student life, student experience",
+  3: "student government, student assembly, student senate, student executive, student body president",
+  4: "entrepreneurship center, innovation, venture, startup programs",
+  5: "multicultural affairs, cultural resource centers, diversity and inclusion (student-facing)",
+  6: "sustainability office, campus sustainability, green programs",
+  7: "food trucks, mobile vending, union or campus life events",
+  8: "campus dining, dining services, auxiliary dining, food services",
+  9: "environmental health and safety, EHS, food safety permits, temporary event permits",
+};
 
 /** After quota/rate-limit on university resolve, skip further resolve calls this run. */
 let geminiSkipUniversityResolve = false;
@@ -119,6 +134,48 @@ function buildTierQueries(shortName, entrepreneurship, tiers, tierAliasesByNumbe
       queries.push({ tier: t, phrase, query: `${s} ${phrase} staff email site:edu` });
       queries.push({ tier: t, phrase, query: `${s} ${phrase} directory email site:edu` });
     }
+  }
+  return queries;
+}
+
+/** Multi-stage: LLM office names + same queries as single-stage for each tier. */
+function buildQueriesForTierWithOffices(shortName, entrepreneurship, tier, tierAliasesByNumber, officeInfo) {
+  const s = shortName.replace(/\s*\([^)]+\)\s*/g, " ").trim();
+  const ent = (entrepreneurship || "entrepreneurship center").trim();
+  const tierPhrase = {
+    1: "student union commercial",
+    2: "student affairs",
+    3: "student government",
+    4: ent,
+    5: "multicultural center",
+    6: "sustainability",
+    7: "food truck",
+    8: "dining services",
+    9: "environmental health and safety",
+  };
+  const base = tierPhrase[tier];
+  if (!base) return [];
+  const aliases = Array.isArray(tierAliasesByNumber?.[String(tier)])
+    ? tierAliasesByNumber[String(tier)]
+    : Array.isArray(tierAliasesByNumber?.[tier])
+      ? tierAliasesByNumber[tier]
+      : [];
+  const phrases = [base, ...aliases.map((x) => String(x || "").trim()).filter(Boolean)].slice(0, 2);
+  const queries = [];
+  const names = (officeInfo?.office_names || []).map((x) => String(x || "").trim()).filter(Boolean).slice(0, 4);
+  const seeds = (officeInfo?.seed_queries || []).map((x) => String(x || "").trim()).filter(Boolean).slice(0, 4);
+
+  for (const name of names) {
+    queries.push({ tier, phrase: base, query: `${s} ${name} staff email site:edu` });
+    queries.push({ tier, phrase: base, query: `${s} ${name} directory site:edu` });
+    queries.push({ tier, phrase: base, query: `${name} ${s} leadership email site:edu` });
+  }
+  for (const sq of seeds) {
+    queries.push({ tier, phrase: base, query: sq });
+  }
+  for (const phrase of phrases) {
+    queries.push({ tier, phrase, query: `${s} ${phrase} staff email site:edu` });
+    queries.push({ tier, phrase, query: `${s} ${phrase} directory email site:edu` });
   }
   return queries;
 }
@@ -425,6 +482,70 @@ function urlMatchesUniversity(url, markers) {
   return false;
 }
 
+function pickCrawlSeeds(firstTierByUrl, tiers, markers, perTier) {
+  const byTier = new Map();
+  for (const t of tiers) byTier.set(t, []);
+  for (const [u, t] of firstTierByUrl.entries()) {
+    if (!byTier.has(t)) continue;
+    try {
+      if (!isLikelyCampusPage(u)) continue;
+      if (markers?.length && !urlMatchesUniversity(u, markers)) continue;
+    } catch {
+      continue;
+    }
+    byTier.get(t).push(u);
+  }
+  const seeds = [];
+  for (const t of tiers) {
+    const urls = (byTier.get(t) || []).sort((a, b) => urlRelevanceScore(b) - urlRelevanceScore(a)).slice(0, perTier);
+    for (const url of urls) seeds.push({ url, tier: t });
+  }
+  return seeds;
+}
+
+/** Open a search-result landing page and collect same-site People / About / Directory links. */
+async function crawlPeopleLinksFromUrl(browser, startUrl, markers, maxLinks) {
+  const page = await browser.newPage({
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  });
+  try {
+    await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
+    await sleep(600);
+    const raw = await page.evaluate(() => {
+      const patterns =
+        /people|about|staff|directory|team|contact|leadership|officers|board|faculty|our-team|who we are|meet/i;
+      const out = [];
+      const seen = new Set();
+      document.querySelectorAll("a[href]").forEach((a) => {
+        let href = a.getAttribute("href");
+        if (!href || href.startsWith("mailto:") || href.startsWith("tel:") || href.startsWith("javascript:"))
+          return;
+        let abs;
+        try {
+          abs = new URL(href, location.href).href;
+        } catch {
+          return;
+        }
+        const t = ((a.textContent || "") + " " + abs).toLowerCase();
+        if (!patterns.test(t)) return;
+        if (seen.has(abs)) return;
+        seen.add(abs);
+        out.push(abs);
+      });
+      return out;
+    });
+    const deduped = dedupeUrls(raw);
+    const scoped = markers?.length ? deduped.filter((u) => urlMatchesUniversity(u, markers)) : deduped;
+    return scoped.slice(0, maxLinks);
+  } catch (e) {
+    console.log(`      ↪ people crawl: ${String(e?.message || e).slice(0, 100)}`);
+    return [];
+  } finally {
+    await page.close();
+  }
+}
+
 async function discoverUrls(browser, universityName, entrepreneurship, maxPages, opts) {
   const context = await browser.newContext({
     userAgent:
@@ -436,7 +557,37 @@ async function discoverUrls(browser, universityName, entrepreneurship, maxPages,
   const page = await context.newPage();
   const tiers = normalizeTiers(opts.tiers);
   const tierAliases = await resolveTierTerminology({ universityName, entrepreneurship, tiers });
-  const queries = buildTierQueries(universityName, entrepreneurship, tiers, tierAliases);
+  const markers = universityMarkers(universityName);
+  const crawlPerTier = Math.min(3, Math.max(1, parseInt(process.env.CRAWL_SEEDS_PER_TIER || "2", 10) || 2));
+  const crawlMaxLinks = Math.min(12, Math.max(4, parseInt(process.env.CRAWL_MAX_LINKS || "10", 10) || 10));
+
+  let queries = [];
+  if (MULTI_STAGE_SEARCH) {
+    console.log(`  Multi-stage search: on (campus office names + people/about crawl)`);
+    for (const t of tiers) {
+      const aliases = Array.isArray(tierAliases?.[String(t)])
+        ? tierAliases[String(t)]
+        : Array.isArray(tierAliases?.[t])
+          ? tierAliases[t]
+          : [];
+      console.log(`  [T${t}] campus office lookup…`);
+      const office = await resolveCampusOfficeForTier({
+        universityName,
+        tier: t,
+        entrepreneurship,
+        aliasArr: aliases,
+      });
+      if (office?.office_names?.length) {
+        console.log(`    → offices: ${office.office_names.slice(0, 4).join(" · ")}`);
+      } else {
+        console.log(`    → offices: (fallback to generic category queries)`);
+      }
+      queries.push(...buildQueriesForTierWithOffices(universityName, entrepreneurship, t, tierAliases, office));
+    }
+  } else {
+    queries = buildTierQueries(universityName, entrepreneurship, tiers, tierAliases);
+  }
+
   const interSearchDelay = Math.min(opts.delayMs, 3500);
   // DDG HTML is frequently slow/blocked on hosted infra; keep it optional and last.
   const useDuckDuckGo = process.env.SEARCH_DDG === "1";
@@ -490,10 +641,36 @@ async function discoverUrls(browser, universityName, entrepreneurship, maxPages,
     await context.close();
   }
 
+  if (MULTI_STAGE_SEARCH) {
+    const seeds = pickCrawlSeeds(firstTierByUrl, tiers, markers, crawlPerTier);
+    console.log(`  People / about crawl: ${seeds.length} seed page(s)`);
+    for (const { url: seedUrl, tier: seedTier } of seeds) {
+      console.log(`    ↪ crawl hub: [T${seedTier}] ${seedUrl}`);
+      const inner = await crawlPeopleLinksFromUrl(browser, seedUrl, markers, crawlMaxLinks);
+      for (const raw of inner) {
+        const key = unwrapSearchRedirect(raw);
+        let normalized;
+        try {
+          const u = new URL(key);
+          u.hash = "";
+          if (u.searchParams.has("utm_source")) u.searchParams.delete("utm_source");
+          normalized = u.href;
+        } catch {
+          normalized = key;
+        }
+        if (!firstTierByUrl.has(normalized)) firstTierByUrl.set(normalized, seedTier);
+        collected.push(raw);
+      }
+      if (inner.length) {
+        console.log(`      +${inner.length} internal link(s) (people/directory/about)`);
+      }
+      await sleep(Math.min(interSearchDelay, 1200));
+    }
+  }
+
   let deduped = dedupeUrls(collected).sort((a, b) => urlRelevanceScore(b) - urlRelevanceScore(a));
   const nonGeneric = deduped.filter((u) => !isGenericCampusPage(u));
   if (nonGeneric.length > 0) deduped = nonGeneric;
-  const markers = universityMarkers(universityName);
   const scoped = deduped.filter((u) => urlMatchesUniversity(u, markers));
   if (scoped.length > 0) {
     deduped = scoped;
@@ -797,6 +974,80 @@ Rules:
     if (isGeminiQuotaError(msg)) geminiSkipUniversityResolve = true;
   }
   return {};
+}
+
+/** LLM: real campus office / program names + seed queries for that category (multi-stage URL discovery). */
+async function resolveCampusOfficeForTier({ universityName, tier, entrepreneurship, aliasArr }) {
+  const uni = String(universityName || "").trim();
+  if (!uni) return null;
+  const hint = TIER_OFFICE_HINT[tier] || "student-facing university staff";
+  const aliases = (aliasArr || []).map((x) => String(x || "").trim()).filter(Boolean);
+  const prompt = `You name REAL offices, programs, or student-facing units at one U.S. university — names used on that campus .edu site.
+
+University: ${JSON.stringify(uni)}
+Outreach category focus: ${JSON.stringify(hint)}
+Optional brand/alias hints: ${JSON.stringify(aliases)}
+
+Return ONLY valid JSON (no markdown):
+{
+  "office_names": ["2-5 short names as the school lists them (e.g. Carolina Union, Division of Student Affairs, Graduate Student Government)"],
+  "seed_queries": ["2-4 full search queries including the university name; use site:edu or site:unc.edu style when it helps"],
+  "primary_domain_hint": "unc.edu or empty"
+}
+
+Rules:
+- office_names must be specific to this campus when possible.
+- seed_queries should surface the main .edu hub page (staff, people, directory, about).
+- Do not invent email addresses.`;
+
+  if (OPENROUTER_API_KEY) {
+    try {
+      const resp = await withTimeout(
+        fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: OPENROUTER_MODEL,
+            temperature: 0.15,
+            messages: [
+              { role: "system", content: "Return only strict JSON objects." },
+              { role: "user", content: prompt },
+            ],
+          }),
+        }),
+        16000,
+        "OpenRouter campus office resolve"
+      );
+      if (resp.ok) {
+        const data = await resp.json();
+        const text = data?.choices?.[0]?.message?.content || "";
+        const parsed = extractJSONObject(text);
+        if (parsed && Array.isArray(parsed.office_names)) return parsed;
+      }
+    } catch {
+      /* empty */
+    }
+  }
+
+  if (!API_KEY || geminiSkipUniversityResolve) return null;
+  try {
+    const genAI = new GoogleGenerativeAI(API_KEY);
+    const model = genAI.getGenerativeModel({
+      model: MODEL,
+      generationConfig: { temperature: 0.15, maxOutputTokens: 700 },
+    });
+    const result = await withTimeout(model.generateContent(prompt), 16000, "Gemini campus office resolve");
+    const text = result?.response?.text?.() || "";
+    const parsed = extractJSONObject(text);
+    if (parsed && Array.isArray(parsed.office_names)) return parsed;
+  } catch (e) {
+    const msg = String(e?.message || e);
+    if (isGeminiQuotaError(msg)) geminiSkipUniversityResolve = true;
+  }
+  return null;
 }
 
 async function geminiExtract({ university, sourceUrl, pageTitle, bodyText, mailtos, tierFocus }) {
