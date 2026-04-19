@@ -4,7 +4,7 @@
 
 **Repo:** [github.com/nealtheseal108/biryani-blitz-outreach](https://github.com/nealtheseal108/biryani-blitz-outreach)
 
-**Typography:** the UI prefers **Helvetica Neue Pro** via optional self-hosted **WOFF2** files in `public/fonts/` (see `public/fonts/README.txt`). Without those files, **system** Helvetica Neue / Helvetica is used.
+**Typography:** **Helvetica Neue LT Pro** is loaded from bundled **OTF** files in `public/fonts/` (see `public/fonts/README.txt`). **Glass UI** uses ~**30% white** surfaces with **`backdrop-filter: blur(25px)`** and light borders, matching common glassmorphism references.
 
 ## Web app (local)
 

@@ -1,10 +1,13 @@
-Optional webfonts (you must own a license to use Helvetica Neue Pro on the web):
+Helvetica Neue LT Pro (licensed OTFs)
 
-Place WOFF2 files here with these exact names so the UI can load them:
+Bundled for the web UI (from your HelveticNeue folder):
 
-  HelveticaNeuePro-Regular.woff2   → 400 weight
-  HelveticaNeuePro-Medium.woff2    → 600 weight (headings / emphasis)
+  HelveticaNeueLTPro-Roman.otf   — 400
+  HelveticaNeueLTPro-Md.otf      — 500 / 600
+  HelveticaNeueLTPro-Bd.otf      — 700
+  HelveticaNeueLTPro-It.otf      — 400 italic
+  HelveticaNeueLTPro-MdIt.otf    — 600 italic
 
-If these files are missing, the app falls back to system Helvetica Neue / sans-serif (no 404 errors in modern browsers for failed @font-face).
+@font-face rules live in /public/css/theme.css.
 
-Rename files from your font package to match the names above, or edit the @font-face URLs in public/index.html.
+Glass style follows a common reference: white at ~30% opacity + backdrop-filter blur(25px) + subtle rgba(255,255,255,0.1) borders.

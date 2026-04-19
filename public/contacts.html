@@ -4,20 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Biryani Blitz — Outreach Dashboard</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/theme.css" />
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --glass-bg: rgba(255,255,255,0.07);
-    --glass-border: rgba(255,255,255,0.14);
-    --glass-hover: rgba(255,255,255,0.12);
+    --glass-bg: var(--glass-surface);
+    --glass-hover: rgba(255, 255, 255, 0.18);
     --accent: #ff7c38;
-    --accent-soft: rgba(255,124,56,0.18);
-    --text-primary: rgba(255,255,255,0.92);
-    --text-secondary: rgba(255,255,255,0.52);
-    --text-muted: rgba(255,255,255,0.3);
-    --bg-1: #0d0f14;
+    --accent-soft: rgba(255, 124, 56, 0.18);
+    --text-primary: rgba(255, 255, 255, 0.94);
+    --text-secondary: rgba(255, 255, 255, 0.52);
+    --text-muted: rgba(255, 255, 255, 0.35);
+    --bg-1: #0a0c12;
     --radius: 14px;
     --radius-sm: 8px;
   }
@@ -25,7 +24,7 @@
   html { scroll-behavior: smooth; }
 
   body {
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font);
     background: var(--bg-1);
     color: var(--text-primary);
     min-height: 100vh;
@@ -37,9 +36,11 @@
     position: fixed;
     inset: 0;
     background:
-      radial-gradient(ellipse 60% 50% at 20% 10%, rgba(255,124,56,0.12) 0%, transparent 60%),
-      radial-gradient(ellipse 50% 60% at 80% 80%, rgba(80,60,200,0.1) 0%, transparent 55%),
-      radial-gradient(ellipse 40% 40% at 60% 30%, rgba(255,200,80,0.06) 0%, transparent 50%);
+      radial-gradient(ellipse 85% 65% at 12% 18%, rgba(255, 95, 45, 0.42), transparent 58%),
+      radial-gradient(ellipse 70% 55% at 88% 12%, rgba(210, 55, 95, 0.32), transparent 52%),
+      radial-gradient(ellipse 75% 70% at 92% 88%, rgba(55, 35, 120, 0.45), transparent 55%),
+      radial-gradient(ellipse 55% 45% at 45% 92%, rgba(255, 150, 70, 0.2), transparent 50%),
+      var(--bg-1);
     pointer-events: none;
     z-index: 0;
   }
@@ -64,25 +65,26 @@
     border-radius: 10px;
     background: var(--accent);
     display: flex; align-items: center; justify-content: center;
-    font-family: 'DM Serif Display', serif;
+    font-family: var(--font);
     font-size: 20px;
+    font-weight: 700;
     color: #fff;
     flex-shrink: 0;
   }
 
   h1 {
-    font-family: 'DM Serif Display', serif;
+    font-family: var(--font);
     font-size: 1.6rem;
-    font-weight: 400;
+    font-weight: 600;
     color: var(--text-primary);
     line-height: 1.2;
   }
 
   h1 span {
     display: block;
-    font-family: 'DM Mono', monospace;
+    font-family: var(--font);
     font-size: 0.7rem;
-    font-weight: 300;
+    font-weight: 500;
     color: var(--accent);
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -104,8 +106,9 @@
     min-width: 100px;
     padding: 1rem 1rem;
     background: var(--glass-bg);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--glass-inset);
     text-align: center;
   }
 
@@ -161,8 +164,9 @@
     font-size: 0.78rem;
     outline: none;
     padding: 0 12px;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--glass-inset);
     transition: border-color 0.2s;
     appearance: none;
     -webkit-appearance: none;
@@ -190,8 +194,9 @@
     font-size: 0.72rem;
     letter-spacing: 0.06em;
     cursor: pointer;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--glass-inset);
     transition: all 0.18s;
     white-space: nowrap;
   }
@@ -223,8 +228,9 @@
     gap: 12px;
     padding: 0.9rem 1.25rem;
     background: rgba(255,255,255,0.05);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--glass-inset);
     cursor: pointer;
     user-select: none;
     transition: background 0.18s;
@@ -269,8 +275,9 @@
   .contacts-wrap {
     overflow-x: auto;
     background: rgba(10,12,18,0.6);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--glass-inset);
   }
 
   .university-section.collapsed .contacts-wrap { display: none; }
@@ -417,8 +424,9 @@
     text-align: center;
     margin-bottom: 2rem;
     background: var(--glass-bg);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    box-shadow: var(--glass-inset);
     cursor: pointer;
     transition: all 0.2s;
   }
