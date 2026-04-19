@@ -470,33 +470,6 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
           <label class="field">Contact tiers to find</label>
           <div class="tier-grid" id="tierGrid"></div>
 
-          <label class="field">Google AI Studio API key (optional if env already set)</label>
-          <input type="password" id="apiKey" placeholder="Paste key for this session" autocomplete="off" />
-
-          <div class="row2">
-            <div>
-              <label class="field">Output JSON</label>
-              <input type="text" id="outPath" value="output/gemini_contacts.json" />
-            </div>
-            <div>
-              <label class="field">Max schools (blank = all in list)</label>
-              <input type="number" id="maxSchools" placeholder="e.g. 3" min="1" />
-            </div>
-          </div>
-          <div class="row2">
-            <div>
-              <label class="field">Resume — start index</label>
-              <input type="number" id="startIdx" value="0" min="0" />
-            </div>
-            <div>
-              <label class="field">Pages / school · delay (ms)</label>
-              <div class="row2" style="margin-top:0">
-                <input type="number" id="pagesPerSchool" value="5" min="1" max="20" />
-                <input type="number" id="delayMs" value="2800" min="500" />
-              </div>
-            </div>
-          </div>
-
           <div class="actions">
             <button type="button" class="primary" id="btnSend">Send &amp; run</button>
             <button type="button" class="ghost" id="btnStop" disabled>Stop</button>
@@ -577,7 +550,7 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
         const r = await fetch("/api/status");
         const j = await r.json();
         const run = j.running ? "Running (pid " + j.pid + ")" : "Idle";
-        const k = j.hasKey ? "Server has API key in env" : "Paste a key below if needed";
+        const k = j.hasKey ? "GOOGLE_API_KEY set on server" : "Set GOOGLE_API_KEY on the server (e.g. Render env)";
         document.getElementById("statusLine").innerHTML = "Status: <strong>" + run + "</strong> · " + k;
         document.getElementById("btnSend").disabled = j.running;
         document.getElementById("btnStop").disabled = !j.running;
@@ -620,12 +593,6 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
         useBuiltInList: useBuiltIn,
         schoolsCsv,
         tiers,
-        apiKey: document.getElementById("apiKey").value.trim() || undefined,
-        out: document.getElementById("outPath").value.trim() || "output/gemini_contacts.json",
-        max: document.getElementById("maxSchools").value || undefined,
-        start: document.getElementById("startIdx").value || 0,
-        pagesPerSchool: document.getElementById("pagesPerSchool").value,
-        delayMs: document.getElementById("delayMs").value,
       };
 
       const res = await fetch("/api/start", {
@@ -638,7 +605,7 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
         addMsg("bot", "<p>" + (j.error || res.statusText) + "</p>");
         return;
       }
-      addMsg("bot", "<p>Job started. Watch the log below. Results append to your output JSON.</p>");
+      addMsg("bot", "<p>Job started. Watch the log below. Output: <code>output/gemini_contacts.json</code></p>");
       refreshStatus();
     };
 
