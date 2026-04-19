@@ -57,7 +57,7 @@
   font-family: "BB Ex";
   font-weight: 500;
   font-style: normal;
-  src: url("/fonts/HelveticaNeueLTPro-Md.otf") format("opentype");
+  src: url("/fonts/HelveticaNeueLTPro-MdEx.otf") format("opentype");
   font-display: swap;
 }
 
@@ -65,7 +65,7 @@
   font-family: "BB ExO";
   font-weight: 500;
   font-style: italic;
-  src: url("/fonts/HelveticaNeueLTPro-MdIt.otf") format("opentype");
+  src: url("/fonts/HelveticaNeueLTPro-MdExO.otf") format("opentype");
   font-display: swap;
 }
 
@@ -73,7 +73,7 @@
   font-family: "BB CnO";
   font-weight: 400;
   font-style: italic;
-  src: url("/fonts/HelveticaNeueLTPro-It.otf") format("opentype");
+  src: url("/fonts/HelveticaNeueLTPro-CnO.otf") format("opentype");
   font-display: swap;
 }
 
