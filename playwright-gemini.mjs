@@ -7,6 +7,7 @@
  * Env:
  *   GOOGLE_API_KEY or GEMINI_API_KEY — https://aistudio.google.com/apikey
  *   GEMINI_MODEL — default gemini-2.0-flash (1.5 models were removed from the API)
+ *   GEMINI_RESOLVE_UNIVERSITY=1 — optional extra Gemini call per school to expand abbreviations (uses quota; default off)
  *
  * Examples:
  *   npm run scrape:batch -- --max 3
@@ -24,8 +25,14 @@ const API_KEY = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
 
 const DEFAULT_DATA = path.join("data", "universities.json");
 
+/** After quota/rate-limit on university resolve, skip further resolve calls this run. */
+let geminiSkipUniversityResolve = false;
+
 function parseArgs() {
   const args = process.argv.slice(2);
+  const envResolve =
+    process.env.GEMINI_RESOLVE_UNIVERSITY === "1" ||
+    process.env.GEMINI_RESOLVE_UNIVERSITY === "true";
   const opts = {
     batch: false,
     urls: [],
@@ -38,8 +45,8 @@ function parseArgs() {
     delayMs: 2800,
     searchesPerSchool: 2,
     tiers: null,
-    /** Gemini: normalize typos / abbreviations / ambiguous system names before search */
-    resolveUniversity: true,
+    /** Off by default — saves Gemini quota; enable via env or --resolve-university */
+    resolveUniversity: envResolve,
   };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -60,7 +67,8 @@ function parseArgs() {
         .split(",")
         .map((x) => parseInt(x.trim(), 10))
         .filter((n) => n >= 1 && n <= 9);
-    } else if (a === "--no-resolve-university") opts.resolveUniversity = false;
+    } else if (a === "--resolve-university") opts.resolveUniversity = true;
+    else if (a === "--no-resolve-university") opts.resolveUniversity = false;
     else if (a?.startsWith("http")) opts.urls.push(a);
   }
   return opts;
@@ -265,8 +273,14 @@ function extractJSONObject(text) {
  * Uses Google AI Studio (Gemini) to fix typos, expand abbreviations (e.g. UNC, UCLA),
  * and disambiguate multi-campus systems so search queries find the right .edu pages.
  */
+function isGeminiQuotaError(msg) {
+  return /429|Too Many Requests|quota|Quota exceeded|exceeded your current quota|free_tier/i.test(
+    String(msg)
+  );
+}
+
 async function resolveUniversityWithGemini(u) {
-  if (!API_KEY) return null;
+  if (!API_KEY || geminiSkipUniversityResolve) return null;
   const genAI = new GoogleGenerativeAI(API_KEY);
   const model = genAI.getGenerativeModel({
     model: MODEL,
@@ -302,8 +316,26 @@ Rules:
 - If city is provided, match that campus.
 - search_name must stay under 120 characters.`;
 
-  const result = await model.generateContent(prompt);
-  const text = result.response.text();
+  let text;
+  try {
+    const result = await model.generateContent(prompt);
+    text = result.response.text();
+  } catch (e) {
+    const msg = String(e?.message || e);
+    if (isGeminiQuotaError(msg)) {
+      geminiSkipUniversityResolve = true;
+      console.warn(
+        "  ⚠ Gemini quota / rate limit — AI university rename disabled for the rest of this run. " +
+          "Search still runs using your school names as entered. " +
+          "For higher limits enable billing in Google AI Studio or wait and retry: " +
+          "https://ai.google.dev/gemini-api/docs/rate-limits"
+      );
+      return null;
+    }
+    console.warn(`  ⚠ Gemini university resolve failed: ${msg.slice(0, 280)}`);
+    return null;
+  }
+
   const parsed = extractJSONObject(text);
   if (!parsed || typeof parsed.canonical_name !== "string") {
     return null;
@@ -448,7 +480,10 @@ async function runBatch(opts) {
 
   const tierList = normalizeTiers(opts.tiers);
   const batchOpts = { ...opts, tiers: tierList };
-  console.log(`\nTier filter: ${tierList.map((t) => `T${t}`).join(", ")}\n`);
+  console.log(`\nTier filter: ${tierList.map((t) => `T${t}`).join(", ")}`);
+  console.log(
+    `AI university name expansion: ${batchOpts.resolveUniversity ? "on (extra Gemini call per school)" : "off (set GEMINI_RESOLVE_UNIVERSITY=1 or --resolve-university to enable)"}\n`
+  );
 
   let all = [];
   if (opts.start > 0 && fs.existsSync(opts.out)) {
@@ -467,12 +502,8 @@ async function runBatch(opts) {
     for (let i = 0; i < list.length; i++) {
       const u = list[i];
       let resolved = null;
-      if (batchOpts.resolveUniversity !== false) {
-        try {
-          resolved = await resolveUniversityWithGemini(u);
-        } catch (e) {
-          console.warn(`  ⚠ Gemini university resolve failed: ${e.message}`);
-        }
+      if (batchOpts.resolveUniversity) {
+        resolved = await resolveUniversityWithGemini(u);
       }
       const displayName = resolved?.canonical_name || u.name;
       const searchName = resolved?.search_name || u.name;
@@ -556,7 +587,8 @@ Usage — you do NOT need to paste URLs per school for batch runs.
     --start N                skip first N schools (resume)
     --pages-per-school N     max .edu pages to open per school (default 5)
     --delay MS               pause between schools (default 2800)
-    --no-resolve-university  skip Gemini step that expands abbreviations / fixes typos
+    --resolve-university     extra Gemini call per school for abbreviations / typos (default env only)
+    --no-resolve-university  force name expansion off (see GEMINI_RESOLVE_UNIVERSITY)
 
   Single URL (manual):
     npm run scrape -- "https://example.edu/staff"
