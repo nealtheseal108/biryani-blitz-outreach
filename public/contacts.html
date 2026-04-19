@@ -80,6 +80,7 @@
     object-fit: cover;
     flex-shrink: 0;
   }
+  .embedded-mode .logo-mark { display: none; }
 
   h1 {
     font-family: var(--font);
@@ -1011,6 +1012,7 @@ bootstrap();
   const embedded = embeddedByQuery || window.top !== window.self;
   const ring = document.getElementById('cursorRing');
   if (embedded) {
+    document.body.classList.add('embedded-mode');
     if (ring) ring.remove();
     document.body.style.cursor = 'none';
     document.documentElement.style.cursor = 'none';
