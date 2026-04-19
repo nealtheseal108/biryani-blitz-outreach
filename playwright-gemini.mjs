@@ -18,6 +18,7 @@
  *   SUBDOMAIN_CONTACT_CAP — max contacts to collect per hostname before skipping more URLs (default 3)
  *   VERIFY_MX=1 — drop contacts whose email domain has no MX record (optional)
  *   CONTACT_SCORER=auto|llm|regex — post-extract mandate filter (externality vs seniority; default auto: LLM if keys set)
+ *   ENRICH_OUTREACH_CARDS=0 — skip second LLM pass that fills bio_snippet + relevance_note for the dashboard
  *
  * Examples:
  *   npm run scrape:batch -- --max 3
@@ -48,6 +49,8 @@ const SUBDOMAIN_CONTACT_CAP = Math.max(1, parseInt(process.env.SUBDOMAIN_CONTACT
 const VERIFY_MX = process.env.VERIFY_MX === "1";
 /** auto = LLM when OPENROUTER_API_KEY or GOOGLE_API_KEY; regex = keyword mandate filter only; llm = require scorer call */
 const CONTACT_SCORER = (process.env.CONTACT_SCORER || "auto").toLowerCase();
+/** After mandate filter, LLM fills name/title/bio/relevance for the dashboard (set ENRICH_OUTREACH_CARDS=0 to skip). */
+const ENRICH_OUTREACH_CARDS = process.env.ENRICH_OUTREACH_CARDS !== "0";
 
 const DEFAULT_DATA = path.join("data", "universities.json");
 
@@ -356,6 +359,15 @@ function filterContactsByRegexMandate(rows) {
 
   for (const c of rows || []) {
     const title = String(c.title || c.name || "");
+    const em = String(c.email || "").toLowerCase();
+    if (
+      /anderson\.|@business\.|kenan-flagler|\.gsb\.|wharton|sloan|@mba\./i.test(em) &&
+      !positive.test(title) &&
+      /mailto contact|^contact \(from directory/i.test(String(c.title || "").trim())
+    ) {
+      dropped++;
+      continue;
+    }
     if (c.evidence === "literal" && positive.test(title)) {
       out.push({
         ...c,
@@ -468,7 +480,7 @@ ${JSON.stringify(payload, null, 2)}
 For EACH contact, return:
 - externality (0.0–1.0): does this role face outward to vendors, students, or external partners?
 - decision_proximity (0.0–1.0): can they initiate or meaningfully influence a vendor placement, event approval, or the correct approval path?
-- exclude_reason: null OR one of "too senior" | "internal only" | "academic" | "wrong dept" | "gatekeeper" | "hostile_dining_ops" | "other"
+- exclude_reason: null OR one of "too senior" | "internal only" | "academic" | "wrong dept" | "gatekeeper" | "hostile_dining_ops" | "business_school_unrelated" | "other"
 - tier: integer 1–9 or null (routing label only)
 - include: boolean
 
@@ -477,6 +489,7 @@ Decision rules:
 - Elected student government or cultural org officers: high include when title is elected role (President, VP, Chair) and student-facing; staff advisors to those bodies are often internal-only (exclude).
 - EHS / food safety / permit: include (true) for pre-clearance channel even if placement decision_proximity is low — they are mandatory early contacts.
 - Campus dining (tier 8): only include catering/special-events style roles that approve outside vendors for events; drop directors/ops/procurement per guidance.
+- EXCLUDE graduate business school / MBA faculty-staff directories (e.g. email @anderson.*.edu, @business.*.edu) unless the role clearly supports campus-wide auxiliary services, commercial partnerships, or student-union-adjacent vendor programs — not generic faculty or program staff unrelated to main-campus vending.
 
 Return ONLY valid JSON (no markdown):
 { "results": [ { "index": 0, "externality": 0.0, "decision_proximity": 0.0, "exclude_reason": null, "tier": null, "include": false } ] }
@@ -541,10 +554,23 @@ The results array MUST have one object per contact, same index order as input, l
 async function filterContactsByMandate(rows, pageContext, sourceUrl) {
   if (!rows?.length) return [];
 
+  const briefing = [];
   const elected = [];
   const rest = [];
   for (const c of rows) {
-    if (isElectedStudentOrgFastPath(c.title, sourceUrl)) {
+    if (String(c.relevance_to_biryani_blitz || "").trim().length > 15) {
+      briefing.push({
+        ...c,
+        mandate_include: true,
+        mandate_scorer: "extraction_briefing",
+        mandate_exclude_reason: null,
+        mandate_externality: Number.isFinite(Number(c.externality_score)) ? Number(c.externality_score) : null,
+        mandate_decision_proximity: Number.isFinite(Number(c.decision_proximity_score))
+          ? Number(c.decision_proximity_score)
+          : null,
+        mandate_tier_suggested: c.tier ?? null,
+      });
+    } else if (isElectedStudentOrgFastPath(c.title, sourceUrl)) {
       elected.push({
         ...c,
         is_elected_student_role: true,
@@ -561,10 +587,11 @@ async function filterContactsByMandate(rows, pageContext, sourceUrl) {
   }
 
   if (rest.length === 0) {
+    const merged = [...elected, ...briefing];
     console.log(
-      `      ↪ mandate filter: kept ${elected.length} (elected student fast-path), 0 scored`
+      `      ↪ mandate filter: kept ${merged.length} (${elected.length} elected, ${briefing.length} briefing), 0 scored`
     );
-    return elected;
+    return merged;
   }
 
   const useLlm = shouldUseLlmMandateScorer();
@@ -594,9 +621,9 @@ async function filterContactsByMandate(rows, pageContext, sourceUrl) {
     }
   }
 
-  const out = [...elected, ...keptFromScored];
+  const out = [...elected, ...briefing, ...keptFromScored];
   console.log(
-    `      ↪ mandate filter: kept ${out.length} (${elected.length} elected fast-path, ${keptFromScored.length} scored), dropped ${dropped}`
+    `      ↪ mandate filter: kept ${out.length} (${elected.length} elected, ${briefing.length} briefing, ${keptFromScored.length} scored), dropped ${dropped}`
   );
   return out;
 }
@@ -1493,6 +1520,33 @@ function inferTierFromUrl(url) {
   return 0;
 }
 
+function displayNameFromEmailLocal(email) {
+  const local = String(email).split("@")[0] || "";
+  if (!local) return "";
+  const parts = local.split(/[._]+/).filter(Boolean);
+  if (parts.length === 0) return "";
+  return parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(" ");
+}
+
+/** Best-effort title from the line/block containing the email in page text. */
+function sniffTitleNearEmail(bodyText, email) {
+  const text = String(bodyText || "");
+  if (!email || !text.includes(email)) return "";
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.includes(email)) continue;
+    const idx = line.indexOf(email);
+    const before = line.slice(0, idx).replace(/[,|•\t]/g, " ").trim();
+    if (before.length > 2 && before.length < 180) return before;
+    if (i > 0) {
+      const prev = lines[i - 1].trim();
+      if (prev.length > 2 && prev.length < 180 && !prev.includes("@")) return prev;
+    }
+  }
+  return "";
+}
+
 function mailtoFallbackContacts({ mailtos, university, sourceUrl }) {
   const tier = classifyUrlTier(sourceUrl) ?? inferTierFromUrl(sourceUrl);
   const out = [];
@@ -1502,8 +1556,10 @@ function mailtoFallbackContacts({ mailtos, university, sourceUrl }) {
       .toLowerCase();
     if (!email || !email.includes("@")) continue;
     const hint = String(m?.linkText || "").trim();
+    const looksLikeEmail = /^[^\s@]+@[^\s@]+$/.test(hint);
+    const nameFromHint = hint && !looksLikeEmail ? hint : displayNameFromEmailLocal(email);
     out.push({
-      name: hint || null,
+      name: nameFromHint || displayNameFromEmailLocal(email) || null,
       title: "mailto contact",
       email,
       tier: tier || undefined,
@@ -1813,6 +1869,105 @@ Rules:
   return null;
 }
 
+function buildBriefingExtractionPrompt({
+  university,
+  sourceUrl,
+  pageTitle,
+  bodyText,
+  mailtos,
+  htmlEmails,
+  tierFocus,
+  urlTierClass,
+}) {
+  const tierHint =
+    tierFocus && tierFocus.length
+      ? `
+Outreach tier routing (C1–C9) for this run — assign tier when include is true:
+${tierFocus.map((t) => `C${t}`).join(", ")}
+C1=student union commercial, C2=student life, C3=student gov, C4=entrepreneurship, C5=cultural/SA, C6=sustainability, C7=food truck/mobile, C8=dining, C9=EHS/food safety
+`
+      : "";
+
+  const urlTierBlock =
+    urlTierClass != null && urlTierClass >= 1 && urlTierClass <= 9
+      ? `
+URL / site structure: the page strongly suggests category C${urlTierClass}. Prefer tier ${urlTierClass} when the person's role matches this part of campus unless their title clearly belongs elsewhere.
+`
+      : "";
+
+  return `
+You are a business development researcher for Biryani Blitz — a 
+student-founded startup that places automated hot food vending machines 
+serving fresh biryani bowls (~90 seconds, ~$8) inside university student 
+unions. We are seeking placement approvals, vendor contracts, and student 
+champions at universities across the US.
+
+You are reviewing a university web page to identify people worth 
+cold-emailing. Only set include:true if you can write a specific, 
+non-generic sentence explaining exactly why they are relevant to 
+getting a biryani vending machine placed on this campus (student union, auxiliary, dining approvals, permits, or student advocacy as applicable).
+
+Page URL: ${sourceUrl}
+University: ${university || "unknown"}
+Page title: ${pageTitle || ""}
+${urlTierBlock}
+${tierHint}
+
+Known mailto links (emails must match these or appear verbatim in page text — never guess):
+${JSON.stringify(mailtos, null, 2)}
+
+Emails also detected in HTML / attributes (may overlap mailto):
+${JSON.stringify((htmlEmails || []).slice(0, 80), null, 2)}
+
+Page text:
+---
+${String(bodyText || "").slice(0, 120000)}
+---
+
+Return ONLY a valid JSON array (no markdown). Include one object per person you seriously evaluate — including people you decide NOT to email — so we can audit exclusions. If nobody appears on the page, return [].
+
+Each object MUST use this shape:
+{
+  "name": "Full name",
+  "title": "Exact title from page",
+  "email": "email — only if explicitly on page or in mailto, never guess; else null",
+  "tier": 1-9 or null,
+  "externality_score": 0.0-1.0,
+  "decision_proximity_score": 0.0-1.0,
+  "include": true|false,
+  "relevance_to_biryani_blitz": "One specific sentence: what this person controls or influences that we need, and why that makes them worth emailing. Must reference their actual title and unit. Bad example: 'May be relevant to food programs.' Good example: 'As Director of Commercial Activities at the Student Union, Sarah approves vendor placement contracts for the building — the approval path we need before deployment.' — or null if include is false",
+  "outreach_angle": "One sentence on how to open the cold email to this specific person — what aspect of their role to reference, what problem of theirs Biryani Blitz solves. — or null if include is false",
+  "exclude_reason": null | "no external vendor mandate" | "too senior / wrong entry point" | "academic / faculty" | "internal ops only" | "email not found on page" | "business school unrelated" | "other"
+}
+
+Rules:
+- If include is false, still return the object for audit; set relevance_to_biryani_blitz and outreach_angle to null unless you need a brief justification only in exclude_reason.
+- Never fabricate emails. If no email on page, set email null and include false.
+- The relevance sentence must be specific to THIS person's role, not generic.
+- A facilities coordinator who handles vendor logistics scores higher than a VP of Student Affairs who does not touch contracts or placements.
+- Elected student leaders (student government presidents, cultural org chairs) are include:true when found with a verifiable email — they are student advocates.
+`.trim();
+}
+
+function confidenceFromBriefingScores(c) {
+  const e = Number(c.externality_score);
+  const d = Number(c.decision_proximity_score);
+  if (Number.isFinite(e) && Number.isFinite(d) && e >= 0.75 && d >= 0.6) return "high";
+  if (Number.isFinite(e) && Number.isFinite(d) && e >= 0.55 && d >= 0.4) return "medium";
+  if (Number.isFinite(e) || Number.isFinite(d)) return "low";
+  return "low";
+}
+
+function normalizeBriefingRows(rows, sourceUrl, universityLabel) {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((r) => ({
+    ...r,
+    source_url: r.source_url || sourceUrl,
+    university: universityLabel || r.university,
+    confidence: r.confidence || confidenceFromBriefingScores(r),
+  }));
+}
+
 async function geminiExtract({
   university,
   sourceUrl,
@@ -1837,55 +1992,16 @@ async function geminiExtract({
       })
     : null;
 
-  const tierHint =
-    tierFocus && tierFocus.length
-      ? `
-Outreach tier focus for this run (categories you may search for):
-${tierFocus.map((t) => `T${t}`).join(", ")}
-T1=student union commercial, T2=student life, T3=student gov, T4=entrepreneurship, T5=cultural/SA, T6=sustainability, T7=food truck/mobile, T8=dining, T9=EHS/food safety
-`
-      : "";
-
-  const urlTierBlock =
-    urlTierClass != null && urlTierClass >= 1 && urlTierClass <= 9
-      ? `
-URL / site structure (authoritative — use tier ${urlTierClass} unless a person's title clearly belongs to a different campus unit):
-The page URL and path strongly suggest outreach tier T${urlTierClass}. Assign tier ${urlTierClass} to contacts unless their role clearly belongs to a different department.
-`
-      : "";
-
-  const prompt = `You extract university / college staff and student-facing contacts for outreach about a food vending partnership.
-
-Context university (may be empty): ${university || "unknown"}
-Source URL: ${sourceUrl}
-Page title: ${pageTitle}
-${urlTierBlock}
-${tierHint}
-Known mailto links found on the page (use these emails when they match a person — prefer factual emails over guessing):
-${JSON.stringify(mailtos, null, 2)}
-
-Emails also detected in HTML / attributes (may overlap mailto):
-${JSON.stringify((htmlEmails || []).slice(0, 80), null, 2)}
-
-Page text (truncated):
----
-${bodyText}
----
-
-Return ONLY a valid JSON array (no markdown, no commentary). Each item:
-{
-  "name": "string or null",
-  "title": "string or null",
-  "email": "string — must appear in page text, HTML-detected list, or mailto list",
-  "tier": integer 1-9 optional,
-  "confidence": "high" | "medium" | "low",
-  "source_url": "${sourceUrl}"
-}
-
-Rules:
-- Only include contacts whose email appears in the page text, mailto list, or HTML-detected emails above (or is clearly obfuscated there as plain text).
-- Do not invent or guess emails from naming patterns alone.
-- If no good contacts, return []`;
+  const prompt = buildBriefingExtractionPrompt({
+    university,
+    sourceUrl,
+    pageTitle,
+    bodyText,
+    mailtos,
+    htmlEmails,
+    tierFocus,
+    urlTierClass,
+  });
 
   async function openRouterExtract() {
     if (!OPENROUTER_API_KEY) return null;
@@ -1904,7 +2020,7 @@ Rules:
               {
                 role: "system",
                 content:
-                  "You extract contact records from university web text. Return only valid JSON arrays, never markdown.",
+                  "You are a business development researcher. Return only valid JSON arrays, never markdown or commentary.",
               },
               { role: "user", content: prompt },
             ],
@@ -1930,12 +2046,15 @@ Rules:
     const text = data?.choices?.[0]?.message?.content || "";
     const parsed = extractJSON(text);
     if (!Array.isArray(parsed)) throw new Error("OpenRouter did not return a parseable JSON array");
-    return parsed;
+    return normalizeBriefingRows(parsed, sourceUrl, university);
   }
 
   if (LLM_PROVIDER === "openrouter") {
     try {
-      return (await openRouterExtract()) || mailtoFallbackContacts({ mailtos, university, sourceUrl });
+      const raw = await openRouterExtract();
+      // null = OpenRouter not configured; [] = model found nobody worth emailing (do not mailto-spam)
+      if (raw === null) return mailtoFallbackContacts({ mailtos, university, sourceUrl });
+      return raw;
     } catch (e) {
       console.warn(`      ⚠ OpenRouter extraction failed; falling back to mailto-only: ${String(e.message || e)}`);
       return mailtoFallbackContacts({ mailtos, university, sourceUrl });
@@ -1968,7 +2087,7 @@ Rules:
     console.error("Gemini raw:", text.slice(0, 1500));
     return mailtoFallbackContacts({ mailtos, university, sourceUrl });
   }
-  return parsed;
+  return normalizeBriefingRows(parsed, sourceUrl, university);
 }
 
 function dedupeContactsByEmail(rows) {
@@ -1988,6 +2107,161 @@ function dedupeContactsByEmail(rows) {
 
 function normalizeEmail(s) {
   return String(s || "").trim().toLowerCase();
+}
+
+function applyHeuristicEnrichContact(c, bodyText) {
+  const email = c.email;
+  let name = String(c.name || "").trim();
+  if (!name || name === "null") name = displayNameFromEmailLocal(email);
+  let title = String(c.title || "").trim();
+  if (!title || title === "mailto contact") {
+    const sn = sniffTitleNearEmail(bodyText, email);
+    title = sn || "Contact (from directory page)";
+  }
+  const bio_snippet =
+    name && title ? `${name} — ${title}`.slice(0, 280) : (title || "").slice(0, 280);
+  let relevance_note = "";
+  const dom = String(email).split("@")[1] || "";
+  if (/anderson\.|\.business\.|mba\.|sloan\.|stanford\.gsb|wharton/i.test(dom)) {
+    relevance_note =
+      "Possible mismatch: email looks like a graduate business school domain. Biryani Blitz targets student union / auxiliary / dining approvals — verify this person is not only MBA-program staff before emailing.";
+  }
+  return { ...c, name, title, bio_snippet, relevance_note };
+}
+
+async function enrichOutreachCardsLLM(contacts, { pageTitle, bodyText, sourceUrl, university }) {
+  if (!contacts.length) return contacts;
+  const payload = contacts.map((c, i) => ({
+    index: i,
+    email: c.email,
+    name: c.name,
+    title: c.title,
+    tier: c.tier,
+  }));
+
+  const prompt = `You prepare outreach notes for Biryani Blitz — a student-founded hot food vending venture seeking placement in student unions and campus auxiliary locations.
+
+University: ${JSON.stringify(university)}
+Page URL: ${sourceUrl}
+Page title: ${pageTitle || ""}
+
+Page text (use to recover real names and job titles; people often appear in lists near emails):
+---
+${String(bodyText || "").slice(0, 14000)}
+---
+
+Contacts (fix missing or generic name/title):
+${JSON.stringify(payload, null, 2)}
+
+For EACH contact index, return:
+- name: best full name from the page; if impossible, derive a readable name from the email local-part (e.g. aki.fujii → Aki Fujii).
+- title: specific job title or role from context — do not leave as "mailto contact" if the page lists a title.
+- bio_snippet: one concise sentence describing who they are.
+- relevance_note: 1–3 sentences on why they might matter for campus food vending, student union commercial services, auxiliary approvals, permits, or student-facing programs — OR state clearly "Poor fit for Biryani Blitz: ..." for graduate business school faculty/staff directories, research faculty, or roles with no path to main-campus vending or auxiliary partnerships.
+
+Return ONLY valid JSON (no markdown):
+{ "results": [ { "index": 0, "name": "", "title": "", "bio_snippet": "", "relevance_note": "" } ] }
+The results array MUST have exactly ${contacts.length} entries in the same index order.`;
+
+  const mergeEnrich = (results) => {
+    const byIdx = new Map();
+    for (const r of results || []) {
+      const i = Number(r.index);
+      if (Number.isFinite(i)) byIdx.set(i, r);
+    }
+    return contacts.map((c, i) => {
+      const r = byIdx.get(i);
+      if (!r) return applyHeuristicEnrichContact(c, bodyText);
+      return {
+        ...c,
+        name: String(r.name || "").trim() || displayNameFromEmailLocal(c.email) || c.name,
+        title: String(r.title || "").trim() || c.title,
+        bio_snippet: String(r.bio_snippet || "").trim(),
+        relevance_note: String(r.relevance_note || "").trim(),
+      };
+    });
+  };
+
+  if (OPENROUTER_API_KEY) {
+    const resp = await withRetry(
+      async () => {
+        const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: OPENROUTER_MODEL,
+            temperature: 0.2,
+            messages: [
+              { role: "system", content: "Return only strict JSON. No markdown." },
+              { role: "user", content: prompt },
+            ],
+          }),
+        });
+        if (!r.ok) {
+          const t = await r.text().catch(() => "");
+          throw new Error(`OpenRouter enrich ${r.status}: ${t.slice(0, 200)}`);
+        }
+        return r;
+      },
+      { label: "OpenRouter outreach enrich", maxAttempts: 3, isRetryable: (msg) => /429|503|rate|quota/i.test(String(msg)) }
+    );
+    const data = await resp.json();
+    const text = data?.choices?.[0]?.message?.content || "";
+    const parsed = extractJSONObject(text);
+    const results = parsed?.results;
+    if (!Array.isArray(results)) throw new Error("OpenRouter enrich: missing results");
+    return mergeEnrich(results);
+  }
+
+  if (!API_KEY) throw new Error("No API key for outreach enrich");
+  const genAI = new GoogleGenerativeAI(API_KEY);
+  const model = genAI.getGenerativeModel({
+    model: MODEL,
+    generationConfig: { temperature: 0.2, maxOutputTokens: 8192 },
+  });
+  const result = await withRetry(() => model.generateContent(prompt), {
+    label: "Gemini outreach enrich",
+    isRetryable: isGeminiQuotaError,
+    maxAttempts: 3,
+  });
+  const text = result.response.text();
+  const parsed = extractJSONObject(text);
+  const results = parsed?.results;
+  if (!Array.isArray(results)) throw new Error("Gemini enrich: missing results");
+  return mergeEnrich(results);
+}
+
+async function enrichOutreachCards(contacts, ctx) {
+  if (!contacts.length) return contacts;
+  const allBriefed = contacts.every(
+    (c) =>
+      String(c.relevance_to_biryani_blitz || "").trim().length > 10 &&
+      String(c.outreach_angle || "").trim().length > 5
+  );
+  if (allBriefed) {
+    return contacts.map((c) => ({
+      ...c,
+      relevance_note: String(c.relevance_note || c.relevance_to_biryani_blitz || "").trim(),
+      bio_snippet:
+        String(c.bio_snippet || "").trim() ||
+        [c.name, c.title].filter(Boolean).join(" — ").slice(0, 280),
+    }));
+  }
+  if (!ENRICH_OUTREACH_CARDS) {
+    return contacts.map((c) => applyHeuristicEnrichContact(c, ctx.bodyText));
+  }
+  if (!OPENROUTER_API_KEY && !API_KEY) {
+    return contacts.map((c) => applyHeuristicEnrichContact(c, ctx.bodyText));
+  }
+  try {
+    return await enrichOutreachCardsLLM(contacts, ctx);
+  } catch (e) {
+    console.warn(`      ⚠ outreach enrich failed: ${String(e?.message || e).slice(0, 160)}`);
+    return contacts.map((c) => applyHeuristicEnrichContact(c, ctx.bodyText));
+  }
 }
 
 async function processUrls(browser, urls, universityLabel, allContacts, allInferred, tierFocus, ctx) {
@@ -2054,10 +2328,22 @@ async function processUrls(browser, urls, universityLabel, allContacts, allInfer
       continue;
     }
 
+    const auditExcluded = (contacts || []).filter((c) => c && c.include === false);
+    if (auditExcluded.length) {
+      console.log(
+        `      ↪ briefing extraction: ${auditExcluded.length} row(s) include:false (audit only, not saved)`
+      );
+    }
+    contacts = (contacts || []).filter((c) => c && c.include !== false && normalizeEmail(c.email));
+
     const withMeta = (contacts || []).map((c) => {
       const email = normalizeEmail(c.email);
       const literal = emailLooksLiteral(email, snap.bodyText, snap.mailtos, htmlSet);
       const tierNum = urlTier != null ? urlTier : c.tier;
+      const rel = String(c.relevance_to_biryani_blitz || "").trim();
+      const bio =
+        String(c.bio_snippet || "").trim() ||
+        [c.name, c.title].filter(Boolean).join(" — ").slice(0, 280);
       return {
         ...c,
         email,
@@ -2065,11 +2351,19 @@ async function processUrls(browser, urls, universityLabel, allContacts, allInfer
         university: universityLabel,
         tier_label: tierNum ? `Tier ${tierNum}` : null,
         evidence: literal ? "literal" : "inferred",
+        relevance_note: rel || String(c.relevance_note || "").trim(),
+        bio_snippet: bio,
       };
     });
 
     const titleFiltered = await filterContactsByMandate(withMeta, snap.bodyText, snap.finalUrl);
-    const routed = titleFiltered.map((row) => {
+    const enriched = await enrichOutreachCards(titleFiltered, {
+      pageTitle: snap.title,
+      bodyText: snap.bodyText,
+      sourceUrl: snap.finalUrl,
+      university: universityLabel,
+    });
+    const routed = enriched.map((row) => {
       const t = row.mandate_tier_suggested != null ? row.mandate_tier_suggested : row.tier;
       return { ...row, tier: t, tier_label: t != null ? `Tier ${t}` : null };
     });

@@ -367,6 +367,48 @@
     font-size: 0.7rem;
   }
 
+  td.notes-cell {
+    max-width: 28rem;
+    vertical-align: top;
+    font-size: 0.68rem;
+    line-height: 1.4;
+  }
+  .note-bio {
+    color: var(--text-primary);
+    margin-bottom: 0.35rem;
+    font-weight: 400;
+  }
+  .note-rel {
+    color: var(--text-muted);
+    font-style: italic;
+    font-size: 0.64rem;
+  }
+
+  details.brief-expand {
+    margin-top: 0.45rem;
+    font-size: 0.62rem;
+    color: var(--text-secondary);
+  }
+  details.brief-expand summary {
+    cursor: pointer;
+    color: var(--accent);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    list-style: none;
+  }
+  details.brief-expand summary::-webkit-details-marker { display: none; }
+  .brief-body {
+    margin-top: 0.4rem;
+    padding: 0.5rem 0.6rem;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.22);
+    border: 0.5px solid var(--glass-border);
+  }
+  .brief-body p { margin: 0.4rem 0 0; line-height: 1.4; }
+  .brief-body p:first-child { margin-top: 0; }
+  .brief-body strong { color: var(--accent); font-weight: 600; margin-right: 0.35rem; }
+
   td.email-cell a {
     color: rgba(100,160,255,0.85);
     text-decoration: none;
@@ -413,31 +455,6 @@
     min-width: 2rem;
     text-align: center;
   }
-
-  .track-badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 20px;
-    font-size: 0.58rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    white-space: nowrap;
-    border: 0.5px solid;
-    max-width: 260px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .tb-1 { background: rgba(255,124,56,0.12); color: #ffb38a; border-color: rgba(255,124,56,0.3); }
-  .tb-2 { background: rgba(60,180,220,0.12); color: #7dd3f5; border-color: rgba(60,180,220,0.28); }
-  .tb-3 { background: rgba(240,200,80,0.12); color: #f5df8a; border-color: rgba(240,200,80,0.28); }
-  .tb-4 { background: rgba(140,100,255,0.12); color: #c4b5ff; border-color: rgba(140,100,255,0.3); }
-  .tb-5 { background: rgba(255,160,90,0.1); color: #ffcc99; border-color: rgba(255,160,90,0.28); }
-  .tb-6 { background: rgba(80,200,130,0.1); color: #8feeb8; border-color: rgba(80,200,130,0.28); }
-  .tb-7 { background: rgba(255,100,160,0.1); color: #ffaac8; border-color: rgba(255,100,160,0.28); }
-  .tb-8 { background: rgba(100,220,140,0.1); color: #9af0bc; border-color: rgba(100,220,140,0.26); }
-  .tb-9 { background: rgba(255,90,90,0.1); color: #ff9e9e; border-color: rgba(255,90,90,0.28); }
-  .tb-0 { background: rgba(255,255,255,0.06); color: var(--text-secondary); border-color: var(--glass-border); }
 
   .conf-dot {
     display: inline-block;
@@ -528,7 +545,7 @@
     font-style: italic;
     font-stretch: condensed;
   }
-  .stat-num, .results-count, .uni-count, .track-badge, .tier-pill {
+  .stat-num, .results-count, .uni-count, .tier-pill {
     font-family: var(--font-ex);
   }
   input[type="search"], select, th, td, .copy-email-btn {
@@ -605,7 +622,7 @@
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
         <circle cx="6.5" cy="6.5" r="4.5"/><path d="M10.5 10.5L14 14"/>
       </svg>
-      <input type="search" id="searchInput" placeholder="Search name, title, email, track…" oninput="render()">
+      <input type="search" id="searchInput" placeholder="Search name, title, email, notes…" oninput="render()">
     </div>
     <select id="tierFilter" onchange="render()">
       <option value="">All categories</option>
@@ -688,6 +705,10 @@ function normalizeContact(raw) {
     tier_label,
     department: raw.department || '',
     confidence: raw.confidence || 'low',
+    bio_snippet: raw.bio_snippet || '',
+    relevance_note: raw.relevance_note || '',
+    relevance_to_biryani_blitz: raw.relevance_to_biryani_blitz || '',
+    outreach_angle: raw.outreach_angle || '',
   };
 }
 
@@ -762,7 +783,7 @@ function getFiltered() {
     if (contactedFilter === 'yes' && !done) return false;
     if (contactedFilter === 'no' && done) return false;
     if (q) {
-      const hay = [c.name, c.title, c.email, c.university, c.department, c.phone, c.tier_label].join(' ').toLowerCase();
+      const hay = [c.name, c.title, c.email, c.university, c.department, c.phone, c.tier_label, c.bio_snippet, c.relevance_note, c.relevance_to_biryani_blitz, c.outreach_angle].join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -777,11 +798,6 @@ function groupByUniversity(contacts) {
     map[key].push(c);
   });
   return map;
-}
-
-function trackClass(tier) {
-  const t = parseTier(tier);
-  return 'track-badge tb-' + (t || 0);
 }
 
 function tierPill(tier) {
@@ -894,19 +910,35 @@ function render() {
       const phoneHtml = c.phone && c.phone !== 'null'
         ? `<span class="phone-cell">${escapeHtml(c.phone)}</span>`
         : '<span style="opacity:0.2">—</span>';
-      const label = c.tier_label || '—';
       const ck = stableContactKey(c);
       const checked = ck && contactChecks[ck] ? ' checked' : '';
       const checkCell = ck
         ? `<td class="td-check"><input type="checkbox" class="contact-done" data-contact-key="${encodeURIComponent(ck)}" aria-label="Marked as contacted"${checked} /></td>`
         : '<td class="td-check"><input type="checkbox" class="contact-done contact-done-disabled" disabled title="No name or university on this row" aria-label="Cannot mark — missing row id" /></td>';
 
+      const bio = (c.bio_snippet && String(c.bio_snippet).trim()) ? escapeHtml(c.bio_snippet) : '—';
+      const whyRaw = String(c.relevance_to_biryani_blitz || c.relevance_note || '').trim();
+      const relPreview =
+        whyRaw.length > 140 ? `${escapeHtml(whyRaw.slice(0, 137))}…` : whyRaw ? escapeHtml(whyRaw) : '—';
+      const relFull = whyRaw ? escapeHtml(whyRaw) : '';
+      const angle = String(c.outreach_angle || '').trim();
+      const angleEsc = angle ? escapeHtml(angle) : '';
+      const briefBlock =
+        whyRaw.length > 140 || angle
+          ? `<details class="brief-expand">
+            <summary>Full briefing</summary>
+            <div class="brief-body">
+              ${whyRaw ? `<p><strong>Why Biryani</strong> ${relFull}</p>` : ''}
+              ${angle ? `<p><strong>Outreach angle</strong> ${angleEsc}</p>` : ''}
+            </div>
+          </details>`
+          : '';
       return `<tr>
         ${checkCell}
         <td>${tierPill(c.tier)}</td>
         <td class="name-cell">${escapeHtml(c.name) || '—'}</td>
         <td>${escapeHtml(c.title) || '—'}</td>
-        <td><span class="${trackClass(c.tier)}">${escapeHtml(label)}</span></td>
+        <td class="notes-cell"><div class="note-bio">${bio}</div><div class="note-rel">${relPreview}</div>${briefBlock}</td>
         <td class="email-cell">${emailHtml}</td>
         <td>${phoneHtml}</td>
         <td><span class="${confClass}"><span class="conf-dot"></span><span class="conf-text">${escapeHtml(c.confidence) || '—'}</span></span></td>
@@ -929,7 +961,8 @@ function render() {
         <table>
           <thead><tr>
             <th class="th-check" title="You’ve reached out">Done</th>
-            <th>Category</th><th>Name</th><th>Title</th><th>Track</th>
+            <th>Category</th><th>Name</th><th>Title</th>
+            <th>Bio &amp; relevance</th>
             <th>Email</th><th>Phone</th><th>Conf.</th>
           </tr></thead>
           <tbody>${rows}</tbody>
@@ -954,7 +987,7 @@ function toggleAll(expand) {
 function exportCSV() {
   const filtered = getFiltered();
   if (!filtered.length) return;
-  const headers = ['university','tier','tier_label','name','title','department','email','phone','confidence','source_url','contacted'];
+  const headers = ['university','tier','tier_label','name','title','bio_snippet','relevance_note','relevance_to_biryani_blitz','outreach_angle','externality_score','decision_proximity_score','department','email','phone','confidence','source_url','contacted'];
   const esc = v => `"${String(v ?? '').replace(/"/g,'""')}"`;
   const rows = [headers.join(','), ...filtered.map(c => {
     const row = headers.map(h => {
