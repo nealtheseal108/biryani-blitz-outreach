@@ -280,6 +280,23 @@
     border: 0.5px solid rgba(255,124,56,0.3);
   }
 
+  .copy-email-btn {
+    border: 0.5px solid rgba(255,124,56,0.35);
+    background: rgba(255,124,56,0.12);
+    color: var(--accent);
+    border-radius: 999px;
+    font-family: var(--font);
+    font-size: 0.62rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.25rem 0.55rem;
+    cursor: pointer;
+  }
+
+  .copy-email-btn:hover {
+    background: rgba(255,124,56,0.22);
+  }
+
   .chevron {
     width: 14px; height: 14px;
     opacity: 0.4;
@@ -694,6 +711,67 @@ function escapeHtml(s) {
     .replace(/"/g,'&quot;');
 }
 
+function firstContactName(contacts) {
+  for (const c of contacts) {
+    const n = String(c?.name || '').trim();
+    if (n && n !== '—') return n;
+  }
+  return 'there';
+}
+
+function firstContactEmail(contacts) {
+  for (const c of contacts) {
+    const e = String(c?.email || '').trim();
+    if (e && e.includes('@')) return e;
+  }
+  return '';
+}
+
+function buildUniversityEmailDraft(uniName, contacts) {
+  const university = String(uniName || 'your university').trim();
+  const name = firstContactName(contacts);
+  const email = firstContactEmail(contacts);
+  const subject = `Subject: Student-led venture: Bringing Biryani Blitz to ${university}`;
+  const toLine = email ? `To: ${email}\n` : '';
+  return `${toLine}${subject}
+
+Hi ${name},
+
+My name is Neal Parekh (UNC Chapel Hill), and I’m reaching out with my co-founder, Sidhya Ganesh (UPenn). We’re the founders of Biryani Blitz, a hot-food vending company designed by students, for students.
+
+After conducting nearly 200 student interviews, we found that over 70% of students struggle to find healthy, hot meals that fit into 15-minute windows between classes. However, Biryani Blitz provides a way for students to get quick, filling, healthy, tasty, and conveniently located biryani (a protein-filled Indian rice dish) all for $10.
+
+We were recently slated to launch our first unit at UC Berkeley, but due to unexpected electrical constraints there, we are looking for a new "home base" campus.
+
+We’re looking for a high-traffic spot at ${university} where students need quick, late-night, or healthy options. We handle the entire operation from installation to maintenance to and restocking, and offer a revenue-share model for the university.
+
+I’ve attached a one-pager with the machine's technical specs and student testimonials. Would you be open to a 10-minute chat next week to see if we might be a fit for your campus?
+
+Best,
+
+Neal Parekh | UNC Chapel Hill
+Sidhya Ganesh | University of Pennsylvania`;
+}
+
+async function copyUniversityEmail(ev, uniName) {
+  ev.stopPropagation();
+  const grouped = groupByUniversity(getFiltered());
+  const contacts = grouped[uniName] || [];
+  const draft = buildUniversityEmailDraft(uniName, contacts);
+  try {
+    await navigator.clipboard.writeText(draft);
+    alert(`Copied email draft for ${uniName}`);
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = draft;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    alert(`Copied email draft for ${uniName}`);
+  }
+}
+
 function render() {
   const filtered = getFiltered();
   const grouped = groupByUniversity(filtered);
@@ -755,6 +833,7 @@ function render() {
         <span class="uni-name">${escapeHtml(uniName)}</span>
         <span class="uni-city"></span>
         <span class="uni-count">${contacts.length} contact${contacts.length !== 1 ? 's' : ''}</span>
+        <button type="button" class="copy-email-btn" onclick="copyUniversityEmail(event, '${safeKey}')">Copy email</button>
         <svg class="chevron" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M3 5l4 4 4-4"/>
         </svg>

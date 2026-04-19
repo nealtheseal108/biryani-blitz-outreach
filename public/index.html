@@ -332,6 +332,12 @@
       min-width: 140px;
     }
     .status strong { color: #8ee4a8; font-weight: 600; }
+    .eta-status {
+      flex: 0 0 auto;
+      min-width: 170px;
+      text-align: right;
+      color: rgba(255, 255, 255, 0.68);
+    }
 
     .log-preview {
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -546,6 +552,7 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
                 <button type="button" class="primary" id="btnSend">Send &amp; run</button>
                 <button type="button" class="ghost" id="btnStop" disabled>Stop</button>
                 <span class="status" id="statusLine">…</span>
+                <span class="status eta-status" id="etaLine">ETA: —</span>
               </div>
               <div class="log-preview" id="logPreview"></div>
             </div>
@@ -623,6 +630,59 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
       chat.scrollTop = chat.scrollHeight;
     }
 
+    let lastLogLines = [];
+    let runIsActive = false;
+    let etaStartMs = null;
+    let lastProgress = { current: 0, total: 0 };
+
+    function parseRunProgress(lines) {
+      const re = /━━\s*(\d+)\s*\/\s*(\d+)/;
+      let cur = 0;
+      let total = 0;
+      for (const line of lines) {
+        const m = line.match(re);
+        if (!m) continue;
+        cur = Number(m[1]) || cur;
+        total = Number(m[2]) || total;
+      }
+      return { current: cur, total };
+    }
+
+    function formatEta(ms) {
+      if (!Number.isFinite(ms) || ms < 0) return "—";
+      const s = Math.round(ms / 1000);
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const sec = s % 60;
+      if (h > 0) return `${h}h ${m}m`;
+      if (m > 0) return `${m}m ${sec}s`;
+      return `${sec}s`;
+    }
+
+    function updateEtaDisplay() {
+      const etaEl = document.getElementById("etaLine");
+      if (!runIsActive) {
+        etaStartMs = null;
+        lastProgress = { current: 0, total: 0 };
+        etaEl.textContent = "ETA: —";
+        return;
+      }
+      const p = parseRunProgress(lastLogLines);
+      if (!p.total || p.current <= 0) {
+        etaEl.textContent = "ETA: gathering URLs…";
+        return;
+      }
+      if (!etaStartMs || p.current !== lastProgress.current || p.total !== lastProgress.total) {
+        if (!etaStartMs) etaStartMs = Date.now();
+        lastProgress = p;
+      }
+      const elapsed = Date.now() - etaStartMs;
+      const perSchoolMs = elapsed / Math.max(1, p.current);
+      const remaining = Math.max(0, p.total - p.current);
+      const etaMs = perSchoolMs * remaining;
+      etaEl.textContent = `ETA: ~${formatEta(etaMs)} (${p.current}/${p.total})`;
+    }
+
     async function refreshStatus() {
       try {
         const r = await fetch("/api/status");
@@ -632,8 +692,12 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
         document.getElementById("statusLine").innerHTML = "Status: <strong>" + run + "</strong> · " + k;
         document.getElementById("btnSend").disabled = j.running;
         document.getElementById("btnStop").disabled = !j.running;
+        runIsActive = !!j.running;
+        updateEtaDisplay();
       } catch {
         document.getElementById("statusLine").textContent = "Cannot reach API — is the server running?";
+        runIsActive = false;
+        updateEtaDisplay();
       }
     }
 
@@ -641,7 +705,9 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
       try {
         const r = await fetch("/api/logs");
         const j = await r.json();
-        document.getElementById("logPreview").textContent = (j.lines || []).slice(-40).join("\n");
+        lastLogLines = j.lines || [];
+        document.getElementById("logPreview").textContent = lastLogLines.slice(-40).join("\n");
+        updateEtaDisplay();
       } catch { /* empty */ }
     }
 
