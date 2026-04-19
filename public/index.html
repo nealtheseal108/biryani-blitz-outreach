@@ -778,15 +778,24 @@ UC Berkeley"></textarea>
         const j = await r.json();
         lastLogLines = j.lines || [];
         const transparent = [];
+        const signal = [];
         for (const line of lastLogLines) {
           const s = String(line || "");
           // Keep only exact scrape targets shown by the scraper: "    → https://..."
           if (/\s→\shttps?:\/\//.test(s)) transparent.push(s);
+          // Also keep high-signal lifecycle/error lines so panel never appears silently stuck.
+          if (
+            /Tier filter:|LLM extraction provider:|AI university name expansion:|━━\s*\d+\/\d+|search empty;|Found \d+ page\(s\) to scrape|no result URLs|saved \d+ unique emails|Done\.|Process exited|Search failed|Gemini:|OpenRouter|quota|error|failed/i.test(
+              s
+            )
+          ) {
+            signal.push(s);
+          }
         }
-        document.getElementById("logPreview").textContent =
-          transparent.length > 0
-            ? transparent.slice(-80).join("\n")
-            : "No scrape destinations yet. Start a run to see exact pages Playwright visits.";
+        const linesToShow = transparent.length > 0 ? transparent.slice(-80) : signal.slice(-30);
+        document.getElementById("logPreview").textContent = linesToShow.length
+          ? linesToShow.join("\n")
+          : "No scrape destinations yet. Start a run to see exact pages Playwright visits.";
         updateEtaDisplay();
       } catch { /* empty */ }
     }
