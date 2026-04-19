@@ -132,10 +132,33 @@ function isLikelyCampusPage(url) {
   }
 }
 
+function unwrapSearchRedirect(raw) {
+  try {
+    const u = new URL(raw);
+    const h = u.hostname.toLowerCase();
+
+    // DuckDuckGo HTML results often use /l/?uddg=<encoded target>
+    if (h.includes("duckduckgo.com")) {
+      const uddg = u.searchParams.get("uddg");
+      if (uddg) return decodeURIComponent(uddg);
+    }
+
+    // Google style redirect wrapper: /url?q=<target>
+    if (h.includes("google.") && u.pathname === "/url") {
+      const q = u.searchParams.get("q");
+      if (q) return q;
+    }
+  } catch {
+    /* empty */
+  }
+  return raw;
+}
+
 function dedupeUrls(urls) {
   const seen = new Set();
   const out = [];
-  for (const raw of urls) {
+  for (const raw0 of urls) {
+    const raw = unwrapSearchRedirect(raw0);
     let u;
     try {
       u = new URL(raw);
