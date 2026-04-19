@@ -106,15 +106,18 @@
     gap: 1px;
     margin-bottom: 2rem;
     border-radius: var(--radius);
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
     border: 0.5px solid var(--glass-border);
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
   }
+  .stats-bar::-webkit-scrollbar { display: none; }
 
   .stat-cell {
-    flex: 1;
-    min-width: 100px;
-    padding: 1rem 1rem;
+    flex: 0 0 auto;
+    min-width: 72px;
+    padding: 0.75rem 0.55rem;
     background: var(--glass-bg);
     backdrop-filter: blur(var(--glass-blur));
     -webkit-backdrop-filter: blur(var(--glass-blur));
@@ -125,9 +128,8 @@
   .stat-cell:not(:last-child) { border-right: 0.5px solid var(--glass-border); }
 
   .stat-cell.tier-stat {
-    flex: 0 1 72px;
-    min-width: 56px;
-    padding: 0.75rem 0.5rem;
+    min-width: 64px;
+    padding: 0.65rem 0.45rem;
   }
 
   .stat-cell.tier-stat .stat-num { font-size: 1.45rem; }
@@ -570,7 +572,7 @@
       </h1>
       <span class="build-tag">build 1a79563</span>
     </div>
-    <a href="/" style="color: #ff7c38; font-size: 0.75rem; margin-right: 0.75rem; text-decoration: none; font-family: inherit;">← Chat &amp; tracker</a>
+    <a href="/" style="color: #ff7c38; font-size: 0.75rem; margin-right: 0.75rem; text-decoration: none; font-family: inherit;">← Run panel</a>
     <button class="export-btn" id="exportBtn" type="button" onclick="exportCSV()">Export CSV</button>
   </header>
 
@@ -578,15 +580,15 @@
     <div class="stat-cell"><div class="stat-num stat-ratio" id="statTotal">—</div><div class="stat-label">Total contacted</div></div>
     <div class="stat-cell"><div class="stat-num" id="statUniversities">—</div><div class="stat-label">Universities</div></div>
     <div class="stat-cell"><div class="stat-num" id="statHigh">—</div><div class="stat-label">High conf.</div></div>
-    <div class="stat-cell tier-stat" title="T1 — contacted / total in tier"><div class="stat-num stat-ratio" id="statT1">—</div><div class="stat-label">T1</div></div>
-    <div class="stat-cell tier-stat" title="T2 — contacted / total in tier"><div class="stat-num stat-ratio" id="statT2">—</div><div class="stat-label">T2</div></div>
-    <div class="stat-cell tier-stat" title="T3 — contacted / total in tier"><div class="stat-num stat-ratio" id="statT3">—</div><div class="stat-label">T3</div></div>
-    <div class="stat-cell tier-stat" title="T4 — contacted / total in tier"><div class="stat-num stat-ratio" id="statT4">—</div><div class="stat-label">T4</div></div>
-    <div class="stat-cell tier-stat" title="T5 — contacted / total in tier"><div class="stat-num stat-ratio" id="statT5">—</div><div class="stat-label">T5</div></div>
-    <div class="stat-cell tier-stat" title="T6 — contacted / total in tier"><div class="stat-num stat-ratio" id="statT6">—</div><div class="stat-label">T6</div></div>
-    <div class="stat-cell tier-stat" title="T7 — contacted / total in tier"><div class="stat-num stat-ratio" id="statT7">—</div><div class="stat-label">T7</div></div>
-    <div class="stat-cell tier-stat" title="T8 — contacted / total in tier"><div class="stat-num stat-ratio" id="statT8">—</div><div class="stat-label">T8</div></div>
-    <div class="stat-cell tier-stat" title="T9 — contacted / total in tier"><div class="stat-num stat-ratio" id="statT9">—</div><div class="stat-label">T9</div></div>
+    <div class="stat-cell tier-stat" title="C1 — contacted / total in category"><div class="stat-num stat-ratio" id="statT1">—</div><div class="stat-label">C1</div></div>
+    <div class="stat-cell tier-stat" title="C2 — contacted / total in category"><div class="stat-num stat-ratio" id="statT2">—</div><div class="stat-label">C2</div></div>
+    <div class="stat-cell tier-stat" title="C3 — contacted / total in category"><div class="stat-num stat-ratio" id="statT3">—</div><div class="stat-label">C3</div></div>
+    <div class="stat-cell tier-stat" title="C4 — contacted / total in category"><div class="stat-num stat-ratio" id="statT4">—</div><div class="stat-label">C4</div></div>
+    <div class="stat-cell tier-stat" title="C5 — contacted / total in category"><div class="stat-num stat-ratio" id="statT5">—</div><div class="stat-label">C5</div></div>
+    <div class="stat-cell tier-stat" title="C6 — contacted / total in category"><div class="stat-num stat-ratio" id="statT6">—</div><div class="stat-label">C6</div></div>
+    <div class="stat-cell tier-stat" title="C7 — contacted / total in category"><div class="stat-num stat-ratio" id="statT7">—</div><div class="stat-label">C7</div></div>
+    <div class="stat-cell tier-stat" title="C8 — contacted / total in category"><div class="stat-num stat-ratio" id="statT8">—</div><div class="stat-label">C8</div></div>
+    <div class="stat-cell tier-stat" title="C9 — contacted / total in category"><div class="stat-num stat-ratio" id="statT9">—</div><div class="stat-label">C9</div></div>
   </div>
 
   <div class="controls">
@@ -597,16 +599,16 @@
       <input type="search" id="searchInput" placeholder="Search name, title, email, track…" oninput="render()">
     </div>
     <select id="tierFilter" onchange="render()">
-      <option value="">All tiers</option>
-      <option value="1">T1 — Student Union / Commercial</option>
-      <option value="2">T2 — Student Life / Experience</option>
-      <option value="3">T3 — Student Government</option>
-      <option value="4">T4 — Entrepreneurship</option>
-      <option value="5">T5 — Cultural / South Asian</option>
-      <option value="6">T6 — Sustainability lists</option>
-      <option value="7">T7 — Food truck / mobile</option>
-      <option value="8">T8 — Campus dining</option>
-      <option value="9">T9 — EHS / food safety</option>
+      <option value="">All categories</option>
+      <option value="1">C1 — Student Union / Commercial</option>
+      <option value="2">C2 — Student Life / Experience</option>
+      <option value="3">C3 — Student Government</option>
+      <option value="4">C4 — Entrepreneurship</option>
+      <option value="5">C5 — Cultural / South Asian</option>
+      <option value="6">C6 — Sustainability lists</option>
+      <option value="7">C7 — Food truck / mobile</option>
+      <option value="8">C8 — Campus dining</option>
+      <option value="9">C9 — EHS / food safety</option>
     </select>
     <select id="confFilter" onchange="render()">
       <option value="">All confidence</option>
@@ -775,7 +777,7 @@ function trackClass(tier) {
 function tierPill(tier) {
   const t = parseTier(tier);
   if (!t) return '—';
-  return `<span class="tier-pill">T${t}</span>`;
+  return `<span class="tier-pill">C${t}</span>`;
 }
 
 function escapeHtml(s) {
@@ -859,7 +861,7 @@ function render() {
       : `${allContacts.length} contacts`;
 
   if (allContacts.length === 0) {
-    container.innerHTML = '<div class="empty">No contacts yet. Run a scrape from the <a href="/" style="color:var(--accent)">chat</a> — results load here automatically when the job writes to the server.</div>';
+    container.innerHTML = '<div class="empty">No contacts yet. Run a scrape from the <a href="/" style="color:var(--accent)">run panel</a> — results load here automatically when the job writes to the server.</div>';
     return;
   }
 
@@ -917,7 +919,7 @@ function render() {
         <table>
           <thead><tr>
             <th class="th-check" title="You’ve reached out">Done</th>
-            <th>Tier</th><th>Name</th><th>Title</th><th>Track</th>
+            <th>Category</th><th>Name</th><th>Title</th><th>Track</th>
             <th>Email</th><th>Phone</th><th>Conf.</th>
           </tr></thead>
           <tbody>${rows}</tbody>
