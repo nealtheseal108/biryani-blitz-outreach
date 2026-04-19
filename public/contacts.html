@@ -114,8 +114,25 @@
 
   .stat-cell:not(:last-child) { border-right: 0.5px solid var(--glass-border); }
 
+  .stat-cell.tier-stat {
+    flex: 0 1 72px;
+    min-width: 56px;
+    padding: 0.75rem 0.5rem;
+  }
+
+  .stat-cell.tier-stat .stat-num { font-size: 1.45rem; }
+  .stat-cell.tier-stat .stat-label { font-size: 0.52rem; }
+
+  .stat-num.stat-ratio {
+    font-size: 1.5rem;
+    letter-spacing: -0.03em;
+    white-space: nowrap;
+  }
+
+  .stat-cell.tier-stat .stat-num.stat-ratio { font-size: 1.2rem; }
+
   .stat-num {
-    font-family: 'DM Serif Display', serif;
+    font-family: var(--font);
     font-size: 1.75rem;
     font-weight: 400;
     color: var(--accent);
@@ -328,6 +345,31 @@
 
   td.email-cell a:hover { color: #78aaff; text-decoration: underline; }
 
+  .th-check, .td-check {
+    width: 48px;
+    text-align: center;
+    vertical-align: middle;
+  }
+
+  input.contact-done {
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    min-height: 18px;
+    margin: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+    opacity: 1;
+    vertical-align: middle;
+    -webkit-appearance: checkbox;
+    appearance: auto;
+  }
+
+  input.contact-done-disabled {
+    cursor: not-allowed;
+    opacity: 0.35;
+  }
+
   .tier-pill {
     display: inline-block;
     font-size: 0.62rem;
@@ -417,29 +459,6 @@
 
   .export-btn:hover { background: rgba(255,124,56,0.28); }
 
-  .upload-zone {
-    border: 0.5px dashed var(--glass-border);
-    border-radius: var(--radius);
-    padding: 2.5rem;
-    text-align: center;
-    margin-bottom: 2rem;
-    background: var(--glass-bg);
-    backdrop-filter: blur(var(--glass-blur));
-    -webkit-backdrop-filter: blur(var(--glass-blur));
-    box-shadow: var(--glass-inset);
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .upload-zone:hover, .upload-zone.drag-over {
-    border-color: var(--accent);
-    background: var(--accent-soft);
-  }
-
-  .upload-zone p { color: var(--text-secondary); font-size: 0.8rem; line-height: 1.7; }
-  .upload-zone strong { color: var(--accent); font-weight: 400; }
-  .upload-zone input { display: none; }
-
   .results-count {
     font-size: 0.68rem;
     color: var(--text-muted);
@@ -464,12 +483,18 @@
   </header>
 
   <div class="stats-bar" id="statsBar">
-    <div class="stat-cell"><div class="stat-num" id="statTotal">—</div><div class="stat-label">Total</div></div>
+    <div class="stat-cell"><div class="stat-num stat-ratio" id="statTotal">—</div><div class="stat-label">Total contacted</div></div>
     <div class="stat-cell"><div class="stat-num" id="statUniversities">—</div><div class="stat-label">Universities</div></div>
     <div class="stat-cell"><div class="stat-num" id="statHigh">—</div><div class="stat-label">High conf.</div></div>
-    <div class="stat-cell"><div class="stat-num" id="statT1">—</div><div class="stat-label">T1 Union</div></div>
-    <div class="stat-cell"><div class="stat-num" id="statT3">—</div><div class="stat-label">T3 Stu Gov</div></div>
-    <div class="stat-cell"><div class="stat-num" id="statT5">—</div><div class="stat-label">T5 Cultural</div></div>
+    <div class="stat-cell tier-stat" title="T1 — contacted / total in tier"><div class="stat-num stat-ratio" id="statT1">—</div><div class="stat-label">T1</div></div>
+    <div class="stat-cell tier-stat" title="T2 — contacted / total in tier"><div class="stat-num stat-ratio" id="statT2">—</div><div class="stat-label">T2</div></div>
+    <div class="stat-cell tier-stat" title="T3 — contacted / total in tier"><div class="stat-num stat-ratio" id="statT3">—</div><div class="stat-label">T3</div></div>
+    <div class="stat-cell tier-stat" title="T4 — contacted / total in tier"><div class="stat-num stat-ratio" id="statT4">—</div><div class="stat-label">T4</div></div>
+    <div class="stat-cell tier-stat" title="T5 — contacted / total in tier"><div class="stat-num stat-ratio" id="statT5">—</div><div class="stat-label">T5</div></div>
+    <div class="stat-cell tier-stat" title="T6 — contacted / total in tier"><div class="stat-num stat-ratio" id="statT6">—</div><div class="stat-label">T6</div></div>
+    <div class="stat-cell tier-stat" title="T7 — contacted / total in tier"><div class="stat-num stat-ratio" id="statT7">—</div><div class="stat-label">T7</div></div>
+    <div class="stat-cell tier-stat" title="T8 — contacted / total in tier"><div class="stat-num stat-ratio" id="statT8">—</div><div class="stat-label">T8</div></div>
+    <div class="stat-cell tier-stat" title="T9 — contacted / total in tier"><div class="stat-num stat-ratio" id="statT9">—</div><div class="stat-label">T9</div></div>
   </div>
 
   <div class="controls">
@@ -497,23 +522,14 @@
       <option value="medium">Medium</option>
       <option value="low">Low</option>
     </select>
+    <select id="contactedFilter" onchange="render()">
+      <option value="">Contacted: all</option>
+      <option value="yes">Contacted only</option>
+      <option value="no">Not contacted</option>
+    </select>
     <button class="filter-btn" id="btnCollapse" type="button" onclick="toggleAll(false)">Collapse all</button>
     <button class="filter-btn" type="button" onclick="toggleAll(true)">Expand all</button>
     <span class="results-count" id="resultsCount"></span>
-  </div>
-
-  <div id="uploadSection">
-    <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()"
-         ondragover="event.preventDefault(); this.classList.add('drag-over')"
-         ondragleave="this.classList.remove('drag-over')"
-         ondrop="handleDrop(event)">
-      <input type="file" id="fileInput" accept=".json,.csv" onchange="handleFile(event)">
-      <p>
-        <strong>Drop agent output here</strong><br>
-        <code>biryani_blitz_contacts.json</code> or <code>.csv</code> (includes <code>tier</code> columns)<br>
-        <span style="font-size:0.7rem; color: var(--text-muted);">Or click to browse</span>
-      </p>
-    </div>
   </div>
 
   <div id="mainTable"></div>
@@ -523,6 +539,34 @@
 let allContacts = [];
 let collapsedState = {};
 let uniRankMap = {};
+/** @type {Record<string, boolean>} */
+let contactChecks = {};
+let checkSaveTimer = null;
+
+/** Unique key for Done checkbox + persistence: real email when present, else university+name. */
+function stableContactKey(c) {
+  const raw = c.email ?? c.Email ?? '';
+  const e = String(raw).toLowerCase().trim();
+  if (e && e !== 'null' && e !== 'n/a' && e.includes('@')) {
+    return e;
+  }
+  const uni = String(c.university ?? '').trim();
+  const name = String(c.name ?? '').trim();
+  if (!uni && !name) return '';
+  return '__row__:' + JSON.stringify([uni, name]);
+}
+
+function normalizeChecks(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const [k, v] of Object.entries(raw)) {
+    let key = String(k).trim();
+    if (!key) continue;
+    if (key.includes('@')) key = key.toLowerCase();
+    out[key] = typeof v === 'object' && v !== null ? !!v.contacted : !!v;
+  }
+  return out;
+}
 
 function parseTier(val) {
   const n = parseInt(String(val), 10);
@@ -532,8 +576,10 @@ function parseTier(val) {
 function normalizeContact(raw) {
   const tier = parseTier(raw.tier);
   const tier_label = raw.tier_label || '';
+  const email = raw.email ?? raw.Email ?? raw['E-mail'] ?? '';
   return {
     ...raw,
+    email,
     tier,
     tier_label,
     department: raw.department || '',
@@ -541,100 +587,76 @@ function normalizeContact(raw) {
   };
 }
 
-const SAMPLE_DATA = [
-  normalizeContact({ university: 'UC Berkeley (UCB)', name: 'Ryan Adelman-Sessler', title: 'Director, Business Development & Commercial Activities', department: 'Student Union', email: 'ryansessler@berkeley.edu', phone: '(510) 387-2246', confidence: 'high', source_url: 'https://studentunion.berkeley.edu', tier: 1, tier_label: 'Student Union / Commercial Activities' }),
-  normalizeContact({ university: 'UC Berkeley (UCB)', name: 'Jaime Santoyo', title: 'Director, Facilities Maintenance & Operations', department: 'Student Union', email: 'jsantoyo@berkeley.edu', phone: '(510) 664-7531', confidence: 'high', source_url: 'https://studentunion.berkeley.edu', tier: 1, tier_label: 'Student Union / Commercial Activities' }),
-  normalizeContact({ university: 'UC Berkeley (UCB)', name: 'Ariel Feinberg-Berson', title: 'Director of Programs & Marketing', department: 'Student Union', email: 'aberson@berkeley.edu', phone: null, confidence: 'high', source_url: 'https://studentunion.berkeley.edu', tier: 1, tier_label: 'Student Union / Commercial Activities' }),
-  normalizeContact({ university: 'UC Berkeley (UCB)', name: 'Huw Thornton', title: 'Cafe Manager, Goldie\'s Coffee', department: 'Dining', email: 'huwthornton@berkeley.edu', phone: '(510) 508-6722', confidence: 'high', source_url: 'https://dining.berkeley.edu', tier: 8, tier_label: 'Campus Dining / Auxiliary' }),
-  normalizeContact({ university: 'New York University (NYU)', name: 'Frank Rimalovski', title: 'Executive Director, Entrepreneurial Institute', department: 'Entrepreneurship', email: 'entrepreneur@nyu.edu', phone: null, confidence: 'high', source_url: 'https://entrepreneurship.nyu.edu', tier: 4, tier_label: 'Entrepreneurship' }),
-  normalizeContact({ university: 'University of Texas at Austin (UT Austin)', name: 'Food Truck Programs (inbox)', title: 'University Unions — mobile vendor line', department: 'Other', email: 'foodtrucks@utexas.edu', phone: null, confidence: 'medium', source_url: 'https://universityunions.utexas.edu', tier: 7, tier_label: 'Food Truck / Mobile Vendor' }),
-  normalizeContact({ university: 'University of Texas at Austin (UT Austin)', name: 'Sustainability (inbox)', title: 'Green events / vendor database', department: 'Sustainability', email: 'sustainability@austin.utexas.edu', phone: null, confidence: 'medium', source_url: 'https://sustainability.utexas.edu', tier: 6, tier_label: 'Sustainability / Green Vendor Lists' }),
-];
+function persistChecks() {
+  try {
+    localStorage.setItem('bb_contact_checks_v1', JSON.stringify(contactChecks));
+  } catch (_) {}
+  clearTimeout(checkSaveTimer);
+  checkSaveTimer = setTimeout(() => {
+    fetch('/api/contact-checks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(contactChecks),
+    }).catch(() => {});
+  }, 400);
+}
 
-function loadSample() {
-  allContacts = SAMPLE_DATA;
-  document.getElementById('uploadSection').style.display = 'none';
+function onContactCheckChange(e) {
+  const t = e.target;
+  if (!t.classList || !t.classList.contains('contact-done')) return;
+  const raw = t.getAttribute('data-contact-key');
+  if (!raw) return;
+  let key;
+  try {
+    key = decodeURIComponent(raw);
+  } catch {
+    return;
+  }
+  if (key.includes('@')) key = key.toLowerCase().trim();
+  if (t.checked) contactChecks[key] = true;
+  else delete contactChecks[key];
+  persistChecks();
   updateStats();
   render();
 }
 
-function handleFile(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  readFile(file);
-}
-
-function handleDrop(event) {
-  event.preventDefault();
-  document.getElementById('uploadZone').classList.remove('drag-over');
-  const file = event.dataTransfer.files[0];
-  if (!file) return;
-  readFile(file);
-}
-
-function readFile(file) {
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      if (file.name.endsWith('.json')) {
-        const data = JSON.parse(e.target.result);
-        allContacts = Array.isArray(data) ? data.map(normalizeContact) : [];
-      } else {
-        allContacts = parseCSV(e.target.result).map(normalizeContact);
-      }
-      document.getElementById('uploadSection').style.display = 'none';
-      updateStats();
-      render();
-    } catch (err) {
-      alert('Could not parse file: ' + err.message);
-    }
-  };
-  reader.readAsText(file);
-}
-
-function parseCSV(text) {
-  const lines = text.trim().split('\n');
-  if (!lines.length) return [];
-  const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
-  return lines.slice(1).map(line => {
-    const vals = [];
-    let cur = '', inQ = false;
-    for (const ch of line) {
-      if (ch === '"') { inQ = !inQ; }
-      else if (ch === ',' && !inQ) { vals.push(cur); cur = ''; }
-      else cur += ch;
-    }
-    vals.push(cur);
-    const obj = {};
-    headers.forEach((h, i) => { obj[h] = (vals[i] || '').replace(/"/g, '').trim(); });
-    return obj;
-  }).filter(r => r.email);
+/** x = rows with Done checked; y = rows in the set (tiers) or all rows (Total). */
+function contactedRatio(contacts) {
+  const y = contacts.length;
+  const x = contacts.filter((c) => {
+    const k = stableContactKey(c);
+    return k && contactChecks[k];
+  }).length;
+  if (y === 0) return '0/0';
+  return `${x}/${y}`;
 }
 
 function updateStats() {
-  const total = allContacts.length;
-  const unis = new Set(allContacts.map(c => c.university)).size;
-  const high = allContacts.filter(c => c.confidence === 'high').length;
-  const t1 = allContacts.filter(c => parseTier(c.tier) === 1).length;
-  const t3 = allContacts.filter(c => parseTier(c.tier) === 3).length;
-  const t5 = allContacts.filter(c => parseTier(c.tier) === 5).length;
+  const unis = new Set(allContacts.map((c) => c.university)).size;
+  const high = allContacts.filter((c) => c.confidence === 'high').length;
 
-  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statTotal').textContent = contactedRatio(allContacts);
   document.getElementById('statUniversities').textContent = unis;
   document.getElementById('statHigh').textContent = high;
-  document.getElementById('statT1').textContent = t1;
-  document.getElementById('statT3').textContent = t3;
-  document.getElementById('statT5').textContent = t5;
+  for (let t = 1; t <= 9; t++) {
+    const inTier = allContacts.filter((c) => parseTier(c.tier) === t);
+    document.getElementById('statT' + t).textContent = contactedRatio(inTier);
+  }
 }
 
 function getFiltered() {
   const q = document.getElementById('searchInput').value.toLowerCase();
   const tier = document.getElementById('tierFilter').value;
   const conf = document.getElementById('confFilter').value;
+  const contactedFilter = document.getElementById('contactedFilter').value;
 
   return allContacts.filter(c => {
     if (tier && String(parseTier(c.tier)) !== tier) return false;
     if (conf && c.confidence !== conf) return false;
+    const ck = stableContactKey(c);
+    const done = ck && contactChecks[ck];
+    if (contactedFilter === 'yes' && !done) return false;
+    if (contactedFilter === 'no' && done) return false;
     if (q) {
       const hay = [c.name, c.title, c.email, c.university, c.department, c.phone, c.tier_label].join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
@@ -683,6 +705,11 @@ function render() {
       ? `${filtered.length} of ${allContacts.length} contacts`
       : `${allContacts.length} contacts`;
 
+  if (allContacts.length === 0) {
+    container.innerHTML = '<div class="empty">No contacts yet. Run a scrape from the <a href="/" style="color:var(--accent)">chat</a> — results load here automatically when the job writes to the server.</div>';
+    return;
+  }
+
   if (uniNames.length === 0) {
     container.innerHTML = '<div class="empty">No contacts match your filters</div>';
     return;
@@ -703,8 +730,14 @@ function render() {
         ? `<span class="phone-cell">${escapeHtml(c.phone)}</span>`
         : '<span style="opacity:0.2">—</span>';
       const label = c.tier_label || '—';
+      const ck = stableContactKey(c);
+      const checked = ck && contactChecks[ck] ? ' checked' : '';
+      const checkCell = ck
+        ? `<td class="td-check"><input type="checkbox" class="contact-done" data-contact-key="${encodeURIComponent(ck)}" aria-label="Marked as contacted"${checked} /></td>`
+        : '<td class="td-check"><input type="checkbox" class="contact-done contact-done-disabled" disabled title="No name or university on this row" aria-label="Cannot mark — missing row id" /></td>';
 
       return `<tr>
+        ${checkCell}
         <td>${tierPill(c.tier)}</td>
         <td class="name-cell">${escapeHtml(c.name) || '—'}</td>
         <td>${escapeHtml(c.title) || '—'}</td>
@@ -729,6 +762,7 @@ function render() {
       <div class="contacts-wrap">
         <table>
           <thead><tr>
+            <th class="th-check" title="You’ve reached out">Done</th>
             <th>Tier</th><th>Name</th><th>Title</th><th>Track</th>
             <th>Email</th><th>Phone</th><th>Conf.</th>
           </tr></thead>
@@ -754,9 +788,18 @@ function toggleAll(expand) {
 function exportCSV() {
   const filtered = getFiltered();
   if (!filtered.length) return;
-  const headers = ['university','tier','tier_label','name','title','department','email','phone','confidence','source_url'];
+  const headers = ['university','tier','tier_label','name','title','department','email','phone','confidence','source_url','contacted'];
   const esc = v => `"${String(v ?? '').replace(/"/g,'""')}"`;
-  const rows = [headers.join(','), ...filtered.map(c => headers.map(h => esc(c[h])).join(','))];
+  const rows = [headers.join(','), ...filtered.map(c => {
+    const row = headers.map(h => {
+      if (h === 'contacted') {
+        const k = stableContactKey(c);
+        return esc(k && contactChecks[k] ? 'yes' : '');
+      }
+      return esc(c[h]);
+    });
+    return row.join(',');
+  })];
   const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -765,7 +808,50 @@ function exportCSV() {
   URL.revokeObjectURL(a.href);
 }
 
-loadSample();
+function contactListSignature(list) {
+  return list
+    .map((c) => stableContactKey(c))
+    .filter(Boolean)
+    .sort()
+    .join('|');
+}
+
+async function pullContactsFromServer() {
+  const r = await fetch('/api/contacts');
+  if (!r.ok) return;
+  const data = await r.json();
+  if (!Array.isArray(data)) return;
+  const next = data.map(normalizeContact);
+  if (contactListSignature(next) === contactListSignature(allContacts) && next.length === allContacts.length) {
+    return;
+  }
+  allContacts = next;
+  updateStats();
+  render();
+}
+
+async function bootstrap() {
+  contactChecks = {};
+  try {
+    const ls = localStorage.getItem('bb_contact_checks_v1');
+    if (ls) Object.assign(contactChecks, normalizeChecks(JSON.parse(ls)));
+  } catch (_) {}
+  try {
+    const r = await fetch('/api/contact-checks');
+    if (r.ok) Object.assign(contactChecks, normalizeChecks(await r.json()));
+  } catch (_) {}
+  try {
+    await pullContactsFromServer();
+  } catch (_) {}
+  document.getElementById('mainTable').addEventListener('change', onContactCheckChange);
+  updateStats();
+  render();
+  setInterval(() => {
+    pullContactsFromServer().catch(() => {});
+  }, 8000);
+}
+
+bootstrap();
 </script>
 </body>
 </html>

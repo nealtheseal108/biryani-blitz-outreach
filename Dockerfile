@@ -1,5 +1,5 @@
-# Playwright + Node — matches package.json playwright version
-FROM mcr.microsoft.com/playwright:v1.49.0-jammy
+# Playwright + Node — MUST match package-lock playwright version (browsers path)
+FROM mcr.microsoft.com/playwright:v1.59.1-jammy
 
 WORKDIR /app
 

@@ -2,6 +2,7 @@ node_modules/
 output/
 data/job-*.json
 data/outreach-state.json
+data/contact-checks.json
 *.env
 .env.*
 .DS_Store

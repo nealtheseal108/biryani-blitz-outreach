@@ -14,6 +14,17 @@ const ROOT = __dirname;
 const PORT = Number(process.env.PORT || process.env.OUTREACH_GUI_PORT || 3847);
 const UNIVERSITIES_PATH = path.join(ROOT, "data", "universities.json");
 const OUTREACH_STATE_PATH = path.join(ROOT, "data", "outreach-state.json");
+const CONTACT_CHECKS_PATH = path.join(ROOT, "data", "contact-checks.json");
+
+function readContactsJsonArray(filePath) {
+  if (!fs.existsSync(filePath)) return [];
+  try {
+    const data = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
 
 const app = express();
 app.use(express.json({ limit: "4mb" }));
@@ -90,6 +101,59 @@ app.post("/api/outreach-state", (req, res) => {
     const body = req.body && typeof req.body === "object" ? req.body : {};
     fs.mkdirSync(path.dirname(OUTREACH_STATE_PATH), { recursive: true });
     fs.writeFileSync(OUTREACH_STATE_PATH, JSON.stringify(body, null, 2), "utf8");
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+/** Merged contacts from Gemini + Anthropic pipeline outputs (deduped by email). */
+app.get("/api/contacts", (req, res) => {
+  try {
+    const merged = new Map();
+    const files = [
+      path.join(ROOT, "output", "gemini_contacts.json"),
+      path.join(ROOT, "output", "biryani_blitz_contacts.json"),
+    ];
+    for (const fp of files) {
+      for (const row of readContactsJsonArray(fp)) {
+        const em = String(row.email || "")
+          .toLowerCase()
+          .trim();
+        if (!em || em === "null" || em === "n/a") continue;
+        const prev = merged.get(em);
+        if (!prev) merged.set(em, { ...row });
+        else merged.set(em, { ...prev, ...row, email: row.email || prev.email });
+      }
+    }
+    const list = [...merged.values()].sort((a, b) => {
+      const ua = String(a.university || "");
+      const ub = String(b.university || "");
+      if (ua !== ub) return ua.localeCompare(ub);
+      return String(a.name || "").localeCompare(String(b.name || ""));
+    });
+    res.json(list);
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+/** Per-email contacted flags: { "email@edu": true } */
+app.get("/api/contact-checks", (req, res) => {
+  try {
+    if (!fs.existsSync(CONTACT_CHECKS_PATH)) return res.json({});
+    const data = JSON.parse(fs.readFileSync(CONTACT_CHECKS_PATH, "utf8"));
+    res.json(typeof data === "object" && data !== null ? data : {});
+  } catch (e) {
+    res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+app.post("/api/contact-checks", (req, res) => {
+  try {
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    fs.mkdirSync(path.dirname(CONTACT_CHECKS_PATH), { recursive: true });
+    fs.writeFileSync(CONTACT_CHECKS_PATH, JSON.stringify(body, null, 2), "utf8");
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) });

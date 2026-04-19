@@ -38,6 +38,8 @@ function parseArgs() {
     delayMs: 2800,
     searchesPerSchool: 2,
     tiers: null,
+    /** Gemini: normalize typos / abbreviations / ambiguous system names before search */
+    resolveUniversity: true,
   };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -58,7 +60,8 @@ function parseArgs() {
         .split(",")
         .map((x) => parseInt(x.trim(), 10))
         .filter((n) => n >= 1 && n <= 9);
-    } else if (a?.startsWith("http")) opts.urls.push(a);
+    } else if (a === "--no-resolve-university") opts.resolveUniversity = false;
+    else if (a?.startsWith("http")) opts.urls.push(a);
   }
   return opts;
 }
@@ -246,6 +249,82 @@ function extractJSON(text) {
   }
 }
 
+function extractJSONObject(text) {
+  const clean = text.replace(/```json\n?|```\n?/g, "").trim();
+  const start = clean.indexOf("{");
+  const end = clean.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return null;
+  try {
+    return JSON.parse(clean.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Uses Google AI Studio (Gemini) to fix typos, expand abbreviations (e.g. UNC, UCLA),
+ * and disambiguate multi-campus systems so search queries find the right .edu pages.
+ */
+async function resolveUniversityWithGemini(u) {
+  if (!API_KEY) return null;
+  const genAI = new GoogleGenerativeAI(API_KEY);
+  const model = genAI.getGenerativeModel({
+    model: MODEL,
+    generationConfig: {
+      temperature: 0.1,
+      maxOutputTokens: 1024,
+    },
+  });
+
+  const name = String(u.name || "").trim();
+  const city = String(u.city || "").trim();
+  const entHint = String(u.entrepreneurship || "").trim();
+
+  const prompt = `You resolve U.S. college/university names for web search and outreach.
+
+User input (may contain typos, nicknames, or ambiguous names like "University of North Carolina" without specifying Chapel Hill vs Charlotte):
+- name: ${JSON.stringify(name)}
+- city_or_region (optional): ${JSON.stringify(city)}
+- entrepreneurship_center_hint (optional): ${JSON.stringify(entHint)}
+
+Return ONLY a single JSON object (no markdown, no commentary) with this shape:
+{
+  "canonical_name": "Official full institution name for display (e.g. University of North Carolina at Chapel Hill)",
+  "search_name": "Short phrase optimized for search engines — include city or well-known abbreviation if it disambiguates (e.g. UNC Chapel Hill or University of North Carolina Chapel Hill)",
+  "city": "City, ST if known else empty string",
+  "entrepreneurship": "Likely entrepreneurship/innovation center label for searches on this campus, or Entrepreneurship Center",
+  "disambiguation": "Empty string if unambiguous; otherwise one short sentence"
+}
+
+Rules:
+- Fix spelling. Expand common abbreviations when helpful for search (UNC, ASU, UIUC, etc.) while keeping search_name concise.
+- If the name matches a multi-campus system and city is empty, choose the flagship/main undergraduate campus that people usually mean unless context clearly indicates otherwise; explain in disambiguation.
+- If city is provided, match that campus.
+- search_name must stay under 120 characters.`;
+
+  const result = await model.generateContent(prompt);
+  const text = result.response.text();
+  const parsed = extractJSONObject(text);
+  if (!parsed || typeof parsed.canonical_name !== "string") {
+    return null;
+  }
+
+  const canonical_name = parsed.canonical_name.trim() || name;
+  const search_name = String(parsed.search_name || canonical_name).trim() || name;
+  const outCity = typeof parsed.city === "string" ? parsed.city.trim() : "";
+  const entrepreneurship = String(parsed.entrepreneurship || entHint || "Entrepreneurship Center").trim();
+  const disambiguation =
+    typeof parsed.disambiguation === "string" ? parsed.disambiguation.trim() : "";
+
+  return {
+    canonical_name,
+    search_name,
+    city: outCity || city,
+    entrepreneurship,
+    disambiguation,
+  };
+}
+
 async function geminiExtract({ university, sourceUrl, pageTitle, bodyText, mailtos, tierFocus }) {
   if (!API_KEY) throw new Error("Set GOOGLE_API_KEY (or GEMINI_API_KEY) from https://aistudio.google.com/apikey");
   const genAI = new GoogleGenerativeAI(API_KEY);
@@ -387,12 +466,29 @@ async function runBatch(opts) {
   try {
     for (let i = 0; i < list.length; i++) {
       const u = list[i];
-      const label = `${i + 1}/${list.length} ${u.name}`;
+      let resolved = null;
+      if (batchOpts.resolveUniversity !== false) {
+        try {
+          resolved = await resolveUniversityWithGemini(u);
+        } catch (e) {
+          console.warn(`  ⚠ Gemini university resolve failed: ${e.message}`);
+        }
+      }
+      const displayName = resolved?.canonical_name || u.name;
+      const searchName = resolved?.search_name || u.name;
+      const entForSearch = resolved?.entrepreneurship || u.entrepreneurship || "Entrepreneurship Center";
+
+      const label = `${i + 1}/${list.length} ${displayName}`;
       console.log(`\n━━ ${label} ━━`);
+      if (resolved && (resolved.search_name !== u.name || resolved.canonical_name !== u.name)) {
+        console.log(
+          `  → Search as: "${searchName}"` + (resolved.disambiguation ? ` (${resolved.disambiguation})` : "")
+        );
+      }
 
       let urls = [];
       try {
-        urls = await discoverUrls(browser, u.name, u.entrepreneurship, opts.pagesPerSchool, batchOpts);
+        urls = await discoverUrls(browser, searchName, entForSearch, opts.pagesPerSchool, batchOpts);
       } catch (e) {
         console.error(`  ✗ Search failed: ${e.message}`);
       }
@@ -401,7 +497,7 @@ async function runBatch(opts) {
         console.log("  (no result URLs — try again later or increase searches)");
       } else {
         console.log(`  Found ${urls.length} page(s) to scrape`);
-        await processUrls(browser, urls, u.name, all, tierList);
+        await processUrls(browser, urls, displayName, all, tierList);
       }
 
       const deduped = dedupeContactsByEmail(all);
@@ -460,6 +556,7 @@ Usage — you do NOT need to paste URLs per school for batch runs.
     --start N                skip first N schools (resume)
     --pages-per-school N     max .edu pages to open per school (default 5)
     --delay MS               pause between schools (default 2800)
+    --no-resolve-university  skip Gemini step that expands abbreviations / fixes typos
 
   Single URL (manual):
     npm run scrape -- "https://example.edu/staff"

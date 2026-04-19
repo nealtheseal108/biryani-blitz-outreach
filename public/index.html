@@ -455,7 +455,7 @@
           <div class="label">Configure run</div>
           <p style="font-size:0.8rem;color:var(--muted);margin-bottom:0.75rem;">
             Paste <strong>one school per line</strong>, or CSV: <code style="color:var(--accent);">name, city, entrepreneurship center</code>.
-            Tick which <strong>tiers</strong> to search for, then send.
+            Abbreviations and informal names are expanded automatically (Gemini) before search. Tick <strong>tiers</strong>, then send.
           </p>
 
           <label class="toggle">
@@ -488,7 +488,7 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
         <button type="button" class="ghost" id="btnCloseTracker">Close</button>
       </div>
       <p class="modal-lead">
-        Check off universities you’ve already contacted. The <strong>dropdown</strong> is your pipeline stage (saved in the browser and synced to the server when available).
+        Check off universities you’ve already contacted. The <strong>dropdown</strong> is your pipeline stage. Everything stays in this dashboard: saved in the browser and synced to the server when available.
       </p>
       <div class="modal-body-scroll">
         <input type="search" id="trackerSearch" placeholder="Filter universities…" autocomplete="off" />
@@ -500,11 +500,7 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
         <div class="tracker-list" id="trackerList"></div>
       </div>
       <div class="tracker-footer">
-        <button type="button" class="ghost" id="btnExportTracker">Export JSON</button>
-        <label class="ghost" style="cursor:pointer;display:inline-block;">
-          Import JSON
-          <input type="file" id="trackerImportFile" accept="application/json,.json" hidden />
-        </label>
+        <span class="status" style="margin:0;">No file export — data is stored here and on the server.</span>
       </div>
     </div>
   </div>
@@ -605,7 +601,10 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
         addMsg("bot", "<p>" + (j.error || res.statusText) + "</p>");
         return;
       }
-      addMsg("bot", "<p>Job started. Watch the log below. Output: <code>output/gemini_contacts.json</code></p>");
+      addMsg(
+        "bot",
+        "<p>Job started — watch the log below. When it finishes, open <a href=\"/contacts.html\" style=\"color:var(--accent)\">Contacts</a> to see everyone in the dashboard (no separate files to download).</p>"
+      );
       refreshStatus();
     };
 
@@ -791,34 +790,6 @@ UC Berkeley (UCB), Berkeley, CA, SCET"></textarea>
     document.getElementById("btnUncheckShown").addEventListener("click", () => {
       trackerFilterList().forEach((u) => setTrackerEntry(u.name, { contacted: false }));
       renderTrackerTable();
-    });
-
-    document.getElementById("btnExportTracker").addEventListener("click", () => {
-      const blob = new Blob([JSON.stringify(trackerState, null, 2)], { type: "application/json" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = "outreach-tracker-state.json";
-      a.click();
-      URL.revokeObjectURL(a.href);
-    });
-
-    document.getElementById("trackerImportFile").addEventListener("change", (ev) => {
-      const file = ev.target.files && ev.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          const data = JSON.parse(reader.result);
-          if (typeof data !== "object" || data === null) throw new Error("Invalid JSON");
-          trackerState = { ...trackerState, ...data };
-          persistTracker();
-          renderTrackerTable();
-        } catch (e2) {
-          alert("Import failed: " + (e2.message || e2));
-        }
-        ev.target.value = "";
-      };
-      reader.readAsText(file);
     });
 
     refreshStatus();
