@@ -115,6 +115,18 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+async function withTimeout(promise, ms, label) {
+  let timer = null;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function chromiumLaunchOptions() {
   const auto = ["--disable-blink-features=AutomationControlled"];
   const o = { headless: true };
@@ -356,25 +368,35 @@ async function discoverUrls(browser, universityName, entrepreneurship, maxPages,
 
   const collected = [];
   try {
-    for (const q of queries) {
+    for (let i = 0; i < queries.length; i++) {
+      const q = queries[i];
+      const qLabel = `${i + 1}/${queries.length}`;
+      console.log(`  [search ${qLabel}] ${q}`);
       let links = [];
       try {
-        links = await searchGoogle(page, q);
-      } catch {
+        const t0 = Date.now();
+        links = await withTimeout(searchGoogle(page, q), 30000, "Google search");
+        console.log(`    Google: ${links.length} link(s) in ${Date.now() - t0}ms`);
+      } catch (e) {
+        console.log(`    Google: failed (${String(e?.message || e).slice(0, 120)})`);
         links = [];
       }
       if (links.length < 2) {
         try {
-          links = await searchDuckDuckGo(page, q);
-        } catch {
-          /* empty */
+          const t0 = Date.now();
+          links = await withTimeout(searchDuckDuckGo(page, q), 20000, "DuckDuckGo search");
+          console.log(`    DuckDuckGo: ${links.length} link(s) in ${Date.now() - t0}ms`);
+        } catch (e) {
+          console.log(`    DuckDuckGo: failed (${String(e?.message || e).slice(0, 120)})`);
         }
       }
       if (links.length < 2) {
         try {
-          links = await searchBing(page, q);
-        } catch {
-          /* empty */
+          const t0 = Date.now();
+          links = await withTimeout(searchBing(page, q), 20000, "Bing search");
+          console.log(`    Bing: ${links.length} link(s) in ${Date.now() - t0}ms`);
+        } catch (e) {
+          console.log(`    Bing: failed (${String(e?.message || e).slice(0, 120)})`);
         }
       }
       collected.push(...links);
