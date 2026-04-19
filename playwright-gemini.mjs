@@ -116,9 +116,12 @@ function sleep(ms) {
 }
 
 function chromiumLaunchOptions() {
+  const auto = ["--disable-blink-features=AutomationControlled"];
   const o = { headless: true };
   if (process.env.PLAYWRIGHT_CHROMIUM_ARGS === "1" || process.env.RENDER) {
-    o.args = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"];
+    o.args = [...auto, "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"];
+  } else {
+    o.args = auto;
   }
   return o;
 }
@@ -151,10 +154,19 @@ function unwrapSearchRedirect(raw) {
       if (uddg) return decodeURIComponent(uddg);
     }
 
-    // Google style redirect wrapper: /url?q=<target>
-    if (h.includes("google.") && u.pathname === "/url") {
+    // Google redirect: /url?q=, /url?url= (common when q is empty)
+    if (h.includes("google.")) {
       const q = u.searchParams.get("q");
-      if (q) return q;
+      if (q && /^https?:\/\//i.test(q)) return q;
+      const urlParam = u.searchParams.get("url");
+      if (urlParam && /^https?:\/\//i.test(urlParam)) {
+        try {
+          return decodeURIComponent(urlParam);
+        } catch {
+          return urlParam;
+        }
+      }
+      if ((u.pathname === "/url" || u.pathname.endsWith("/url")) && q) return q;
     }
   } catch {
     /* empty */
@@ -219,22 +231,92 @@ async function searchBing(page, query) {
   return links;
 }
 
+/** EU/consent screens — click through so real results load. */
+async function dismissGoogleConsent(page) {
+  const tryClick = async (locator) => {
+    try {
+      if (await locator.isVisible({ timeout: 600 })) {
+        await locator.click({ timeout: 3000 });
+        await sleep(800);
+        return true;
+      }
+    } catch {
+      /* keep going */
+    }
+    return false;
+  };
+  await tryClick(page.getByRole("button", { name: /^Accept all$/i }).first());
+  await tryClick(page.getByRole("button", { name: /^I agree$/i }).first());
+  await tryClick(page.locator("#L2AGLb"));
+  await tryClick(page.locator("button").filter({ hasText: /^Accept$/i }).first());
+}
+
+/**
+ * Google changes SERP markup often; collect links from #rso (and fallbacks), not only "a h3".
+ */
 async function searchGoogle(page, query) {
   const enc = encodeURIComponent(query);
-  await page.goto(`https://www.google.com/search?q=${enc}&num=10`, {
+  await page.goto(`https://www.google.com/search?q=${enc}&num=10&hl=en&gl=us&pws=0`, {
     waitUntil: "domcontentloaded",
-    timeout: 45000,
+    timeout: 60000,
   });
+  await dismissGoogleConsent(page);
+  await page.locator("#rso").waitFor({ state: "attached", timeout: 15000 }).catch(() => {});
   await sleep(900);
+
+  const blockedHint = await page
+    .locator("body")
+    .innerText()
+    .catch(() => "");
+  if (/unusual traffic|automated queries|I'm not a robot|reCAPTCHA|can't verify you're not a robot/i.test(blockedHint)) {
+    console.log("  (Google blocked or showed CAPTCHA — use Bing/DuckDuckGo fallbacks for this query)");
+    return [];
+  }
+
   const links = await page
-    .$$eval("a h3", (heads) =>
-      heads
-        .map((h) => h.closest("a"))
-        .filter(Boolean)
-        .map((a) => a.href)
-        .filter(Boolean)
-    )
+    .evaluate(() => {
+      const skip = (u) =>
+        !u ||
+        /google\.com\/(search\?|intl\/|maps|imgres|travel|flights|accounts)/i.test(u) ||
+        /support\.google|policies\.google|chrome\.google|play\.google/i.test(u);
+
+      const pushUnique = (set, arr, href) => {
+        if (!href || skip(href)) return;
+        if (set.has(href)) return;
+        set.add(href);
+        arr.push(href);
+      };
+
+      const out = [];
+      const seen = new Set();
+
+      const collectFrom = (root) => {
+        if (!root) return;
+        root.querySelectorAll("a[href]").forEach((a) => {
+          pushUnique(seen, out, a.href);
+        });
+      };
+
+      collectFrom(document.querySelector("#rso"));
+      collectFrom(document.querySelector("#center_col"));
+
+      // Legacy layout: title links
+      document.querySelectorAll("a h3").forEach((h3) => {
+        const a = h3.closest("a");
+        if (a?.href) pushUnique(seen, out, a.href);
+      });
+
+      if (out.length < 2) {
+        collectFrom(document.querySelector("main"));
+      }
+      if (out.length < 2) {
+        collectFrom(document.body);
+      }
+
+      return out;
+    })
     .catch(() => []);
+
   return links;
 }
 
@@ -260,10 +342,14 @@ function urlRelevanceScore(url) {
 }
 
 async function discoverUrls(browser, universityName, entrepreneurship, maxPages, opts) {
-  const page = await browser.newPage({
+  const context = await browser.newContext({
     userAgent:
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    viewport: { width: 1366, height: 864 },
+    locale: "en-US",
+    timezoneId: "America/Los_Angeles",
   });
+  const page = await context.newPage();
   const tiers = normalizeTiers(opts.tiers);
   const queries = buildTierQueries(universityName, entrepreneurship, tiers);
   const interSearchDelay = Math.min(opts.delayMs, 3500);
@@ -295,7 +381,7 @@ async function discoverUrls(browser, universityName, entrepreneurship, maxPages,
       await sleep(interSearchDelay);
     }
   } finally {
-    await page.close();
+    await context.close();
   }
 
   let deduped = dedupeUrls(collected).sort((a, b) => urlRelevanceScore(b) - urlRelevanceScore(a));
