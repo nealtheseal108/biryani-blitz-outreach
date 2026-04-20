@@ -333,6 +333,7 @@ app.use(express.json({ limit: "4mb" }));
 let child = null;
 const logLines = [];
 const MAX_LOG = 500;
+let demoContactsArmed = false;
 
 function pushLog(line) {
   const s = String(line).replace(/\r$/, "");
@@ -411,7 +412,7 @@ app.post("/api/outreach-state", (req, res) => {
 /** Merged contacts outputs (deduped by email). */
 app.get("/api/contacts", (req, res) => {
   try {
-    if (DEMO_BERKELEY_CONTACTS) {
+    if (DEMO_BERKELEY_CONTACTS && demoContactsArmed) {
       return res.json(BERKELEY_DEMO_CONTACTS);
     }
     const merged = new Map();
@@ -583,6 +584,11 @@ app.post("/api/start", (req, res) => {
     RENDER: process.env.RENDER || "",
     PLAYWRIGHT_CHROMIUM_ARGS: process.env.PLAYWRIGHT_CHROMIUM_ARGS || (process.env.RENDER ? "1" : ""),
   };
+
+  if (DEMO_BERKELEY_CONTACTS) {
+    // Demo contacts become visible only after explicit "Send & run".
+    demoContactsArmed = true;
+  }
 
   child = spawn(process.execPath, args, { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout.on("data", (d) => pushLog(d.toString()));

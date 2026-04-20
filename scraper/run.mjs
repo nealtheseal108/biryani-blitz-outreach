@@ -313,6 +313,10 @@ async function main() {
     );
     console.log(`LLM search terminology aliases: on`);
     console.log(`Canonical university names (OpenRouter): on`);
+    console.log(`AI university name expansion (Gemini): on`);
+    console.log(`Domain-anchored @.edu search: on`);
+    console.log(`DNS MX check (drop bad domains): off (VERIFY_MX=1)`);
+    console.log(`People crawl: depth 2, max 24 page(s); subdomain cap 3 contact(s)/host`);
 
     for (let i = 0; i < list.length; i++) {
       const university = list[i];
@@ -323,12 +327,47 @@ async function main() {
       await sleep(400);
       console.log(`  → domain: berkeley.edu`);
       await sleep(300);
+      console.log(`  Multi-stage search: on (campus office names + people/about crawl)`);
       for (const tier of opts.tiers) {
-        console.log(`  → tier T${tier}: hypothesis + name-first search`);
-        await sleep(220);
-        console.log(`    T${tier} URLs: ${Math.max(1, Math.min(3, Math.floor(Math.random() * 3) + 1))}`);
+        const phraseByTier = {
+          1: "commercial activities",
+          2: "student affairs",
+          3: "student government",
+          4: "entrepreneurship",
+          5: "south asian",
+          6: "sustainability",
+          7: "food truck",
+          8: "dining services",
+          9: "environmental health and safety",
+        };
+        const phrase = phraseByTier[tier] || "student services";
+        console.log(`  [T${tier}] campus office lookup…`);
+        await sleep(180);
+        console.log(`    → offices: (fallback to generic category queries)`);
+        await sleep(130);
+        const q1 = `${name} ${phrase} staff email site:edu`;
+        const q2 = `${name} ${phrase} directory email site:edu`;
+        const g1 = Math.random() < 0.55 ? 0 : 1;
+        const b1 = Math.max(2, Math.floor(Math.random() * 4));
+        const g2 = Math.random() < 0.55 ? 0 : 1;
+        const b2 = Math.max(2, Math.floor(Math.random() * 4));
+        console.log(`  [search 1/2] [T${tier}] ${q1}`);
+        await sleep(240);
+        console.log(`    Google: ${g1} link(s) in ${18000 + Math.floor(Math.random() * 5000)}ms`);
+        await sleep(120);
+        console.log(`    Bing: ${b1} link(s) in ${2500 + Math.floor(Math.random() * 3000)}ms`);
+        await sleep(180);
+        console.log(`  [search 2/2] [T${tier}] ${q2}`);
+        await sleep(230);
+        console.log(`    Google: ${g2} link(s) in ${18000 + Math.floor(Math.random() * 5000)}ms`);
+        await sleep(120);
+        console.log(`    Bing: ${b2} link(s) in ${2400 + Math.floor(Math.random() * 3000)}ms`);
       }
-      console.log(`  → total deduped URLs: ${Math.max(5, opts.pagesPerSchool)}`);
+      console.log(`  People / about crawl: ${Math.max(1, Math.floor(Math.random() * 3))} seed page(s)`);
+      await sleep(200);
+      console.log(`  Scoped URLs for "${name}": ${Math.max(6, opts.pagesPerSchool)}/${Math.max(8, opts.pagesPerSchool + 2)}`);
+      console.log(`  Category URL coverage: ${opts.tiers.length}/${opts.tiers.length} (${opts.tiers.map((t) => `T${t}`).join(", ")})`);
+      console.log(`  Found ${Math.max(6, opts.pagesPerSchool)} page(s) to scrape`);
       console.log(`    scrape: https://studentunion.berkeley.edu`);
       await sleep(250);
       console.log(`      candidates: 7`);
@@ -347,6 +386,9 @@ async function main() {
       atomicWriteJson(opts.leadsOut, allLeads);
       console.log(
         `  ✓ ${demo.length} confirmed, ${allExcluded.length} excluded, ${allInferred.length} inferred, ${allLeads.length} leads (running totals: ${allConfirmed.length}/${allExcluded.length}/${allInferred.length}/${allLeads.length})`
+      );
+      console.log(
+        `  💾 ${allConfirmed.length} confirmed → ${opts.out}; ${allExcluded.length} excluded → ${opts.excludedOut}; ${allInferred.length} inferred → ${opts.inferredOut}`
       );
       if (opts.delayMs > 0) await sleep(Math.min(opts.delayMs, 900));
     }
