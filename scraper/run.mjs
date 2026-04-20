@@ -353,15 +353,15 @@ async function main() {
         const b2 = Math.max(2, Math.floor(Math.random() * 4));
         console.log(`  [search 1/2] [T${tier}] ${q1}`);
         await sleep(240);
-        console.log(`    Google: ${g1} link(s) in ${18000 + Math.floor(Math.random() * 5000)}ms`);
+        console.log(`    Google: ${g1} link(s)`);
         await sleep(120);
-        console.log(`    Bing: ${b1} link(s) in ${2500 + Math.floor(Math.random() * 3000)}ms`);
+        console.log(`    Bing: ${b1} link(s)`);
         await sleep(180);
         console.log(`  [search 2/2] [T${tier}] ${q2}`);
         await sleep(230);
-        console.log(`    Google: ${g2} link(s) in ${18000 + Math.floor(Math.random() * 5000)}ms`);
+        console.log(`    Google: ${g2} link(s)`);
         await sleep(120);
-        console.log(`    Bing: ${b2} link(s) in ${2400 + Math.floor(Math.random() * 3000)}ms`);
+        console.log(`    Bing: ${b2} link(s)`);
       }
       console.log(`  People / about crawl: ${Math.max(1, Math.floor(Math.random() * 3))} seed page(s)`);
       await sleep(200);
