@@ -75,7 +75,7 @@
     .request-pane {
       display: flex;
       flex-direction: column;
-      padding: 0 0.9rem 0.8rem;
+      padding: 0;
     }
 
     .data-pane {
@@ -101,6 +101,20 @@
       font-weight: 600;
     }
 
+    .data-head-right {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .data-head-note {
+      font-size: 0.62rem;
+      color: var(--muted);
+      opacity: 0.85;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
     .data-head a {
       font-size: 0.72rem;
       color: var(--text);
@@ -115,6 +129,30 @@
       flex: 1;
       border: 0;
       background: transparent;
+      outline: none;
+    }
+    .data-frame:focus,
+    .data-frame:focus-visible {
+      outline: none;
+    }
+
+    .run-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.6rem;
+      flex-shrink: 0;
+      padding: 0.8rem 0.95rem;
+      border-bottom: 1px solid var(--glass-border);
+      background: #2a140d;
+    }
+    .run-head h2 {
+      font-size: 0.82rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 600;
+      margin: 0;
     }
 
     header {
@@ -168,10 +206,16 @@
     .request-body {
       flex: 1;
       overflow-y: auto;
-      padding-top: 0.6rem;
+      padding: 0.75rem 0.9rem 0.85rem;
       min-height: 0;
     }
 
+    .panel-lead {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 0.75rem;
+      line-height: 1.45;
+    }
     .panel {
       border-radius: var(--radius);
       border: 1px solid var(--glass-border);
@@ -203,7 +247,24 @@
       transition: background 0.15s;
     }
     .tier-item:hover { background: rgba(255,255,255,0.04); color: var(--text); }
-    .tier-item input { accent-color: var(--accent); margin-top: 0.15rem; flex-shrink: 0; }
+    .tier-item:focus-within {
+      outline: none;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .tier-item input {
+      accent-color: var(--accent);
+      margin-top: 0.15rem;
+      flex-shrink: 0;
+      outline: none;
+    }
+    .tier-item input:focus {
+      outline: none;
+      box-shadow: none;
+    }
+    .tier-item input:focus-visible {
+      box-shadow: 0 0 0 2px rgba(241, 94, 34, 0.55);
+      border-radius: 4px;
+    }
     .tier-item strong {
       font-family: var(--font-ex);
       color: var(--text);
@@ -388,9 +449,17 @@
     header h1 {
       font-family: var(--font-exo);
       font-style: italic;
-      letter-spacing: 0.07em;
+      font-size: 1.42rem;
+      font-weight: 600;
+      line-height: 1.15;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
       font-stretch: expanded;
+    }
+    header h1 span {
+      font-size: 0.64rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
     }
     header h1 span,
     label.field {
@@ -400,11 +469,21 @@
       letter-spacing: 0.16em;
     }
     .data-head h2,
+    .run-head h2,
     .status,
     .eta-status,
     .toggle {
       font-family: var(--font-cno);
       font-style: italic;
+    }
+    .run-head .run-head-note,
+    .data-head-note {
+      font-family: var(--font-cno);
+      font-style: italic;
+      font-size: 0.62rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      opacity: 0.85;
     }
     .actions button {
       font-family: var(--font-ex);
@@ -452,6 +531,20 @@
       box-shadow: 0 0 14px rgba(255, 238, 222, 0.45);
       transition: opacity 0.12s ease;
     }
+
+    /* Same issue as dashboard: default focus rings look like black boxes on warm dark panels */
+    .app :is(a, button) {
+      outline: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .app :is(a, button):focus-visible {
+      outline: 2px solid rgba(241, 94, 34, 0.65);
+      outline-offset: 2px;
+    }
+    textarea:focus,
+    input:focus {
+      outline: none;
+    }
   </style>
 </head>
 <body>
@@ -460,18 +553,21 @@
     <header>
       <div class="brand-head">
         <img src="/img/biryani-blitz-logo-light.png" alt="Biryani Blitz logo" />
-        <h1><span>Biryani Blitz</span>Outreach assistant</h1>
+        <h1><span>Biryani Blitz</span>Outreach Dashboard</h1>
         <span class="build-tag">build 1a79563</span>
       </div>
     </header>
 
     <div class="workspace">
-      <section class="request-pane">
+      <section class="request-pane" aria-label="Configure scrape run">
+        <div class="run-head">
+          <h2>Configure run</h2>
+          <span class="run-head-note">Schools · categories · log</span>
+        </div>
         <div class="request-body">
           <div class="composer">
             <div class="composer-inner panel">
-              <div style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.12em;color:var(--accent);margin-bottom:0.45rem;font-weight:600;">Configure run</div>
-              <p style="font-size:0.8rem;color:var(--muted);margin-bottom:0.75rem;">
+              <p class="panel-lead">
                 Paste <strong>school names only</strong>, one per line. Tick <strong>categories</strong>, then run.
               </p>
 
@@ -503,7 +599,10 @@ UC Berkeley"></textarea>
       <section class="data-pane" aria-label="Contacts dashboard">
         <div class="data-head">
           <h2>Data dashboard</h2>
-          <a href="/contacts.html" target="_blank" rel="noopener noreferrer">Open full view ↗</a>
+          <div class="data-head-right">
+            <span class="data-head-note">Contacts · filters · export</span>
+            <a href="/contacts.html" target="_blank" rel="noopener noreferrer">Open full view ↗</a>
+          </div>
         </div>
         <iframe class="data-frame" src="/contacts.html?embedded=1" title="Contacts dashboard"></iframe>
       </section>

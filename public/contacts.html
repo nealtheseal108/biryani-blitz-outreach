@@ -583,6 +583,23 @@
     background: rgba(255, 238, 222, 0.16);
     box-shadow: 0 0 14px rgba(255, 238, 222, 0.45);
   }
+
+  /* Default browser focus rings read as harsh black outlines on dark / orange UI */
+  .wrapper :is(a, button, input, select, summary) {
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .wrapper :is(a, button, input, select, summary):focus-visible {
+    outline: 2px solid rgba(241, 94, 34, 0.65);
+    outline-offset: 2px;
+  }
+  input.contact-done:focus-visible {
+    outline-offset: 3px;
+  }
+  select:focus,
+  select:active {
+    box-shadow: none;
+  }
 </style>
 </head>
 <body>
