@@ -245,12 +245,16 @@ app.post("/api/start", (req, res) => {
   const outAbs = path.isAbsolute(outPath) ? outPath : path.join(ROOT, outPath);
 
   const args = [
-    path.join(ROOT, "playwright-gemini.mjs"),
+    path.join(ROOT, "scraper", "run.mjs"),
     "--batch",
     "--data",
     dataPath,
     "--out",
     outAbs,
+    "--excluded-out",
+    path.join(ROOT, "output", "excluded.json"),
+    "--inferred-out",
+    path.join(ROOT, "output", "inferred.json"),
     "--tiers",
     [...new Set(tiers)].sort((a, b) => a - b).join(","),
   ];

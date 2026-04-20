@@ -1067,6 +1067,31 @@ function isLikelyCampusPage(url) {
 }
 
 function unwrapSearchRedirect(raw) {
+  const decodeBingU = (val) => {
+    const s = String(val || "").trim();
+    if (!s) return "";
+    if (/^https?:\/\//i.test(s)) return s;
+    const uriDecoded = (() => {
+      try {
+        return decodeURIComponent(s);
+      } catch {
+        return s;
+      }
+    })();
+    if (/^https?:\/\//i.test(uriDecoded)) return uriDecoded;
+    // Bing "u=" often looks like "a1aHR0cHM6Ly9..." (a1 + base64url(http...))
+    const base = uriDecoded.replace(/^a1/i, "");
+    const normalized = base.replace(/-/g, "+").replace(/_/g, "/");
+    try {
+      const pad = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
+      const decoded = Buffer.from(normalized + pad, "base64").toString("utf8");
+      if (/^https?:\/\//i.test(decoded)) return decoded;
+    } catch {
+      /* empty */
+    }
+    return "";
+  };
+
   try {
     const u = new URL(raw);
     const h = u.hostname.toLowerCase();
@@ -1090,6 +1115,16 @@ function unwrapSearchRedirect(raw) {
         }
       }
       if ((u.pathname === "/url" || u.pathname.endsWith("/url")) && q) return q;
+    }
+
+    // Bing redirect wrappers: /ck/a?...&u=<encoded-target>
+    if (h.includes("bing.com")) {
+      const viaU = decodeBingU(u.searchParams.get("u"));
+      if (viaU) return viaU;
+      const viaUrl = decodeBingU(u.searchParams.get("url"));
+      if (viaUrl) return viaUrl;
+      const viaR = decodeBingU(u.searchParams.get("r"));
+      if (viaR) return viaR;
     }
   } catch {
     /* empty */
@@ -1471,6 +1506,8 @@ async function discoverUrls(browser, universityName, entrepreneurship, maxPages,
 
   const collected = [];
   const firstTierByUrl = new Map();
+  let totalGoogleLinks = 0;
+  let totalBingLinks = 0;
   try {
     for (let i = 0; i < queries.length; i++) {
       const qObj = queries[i];
@@ -1478,19 +1515,25 @@ async function discoverUrls(browser, universityName, entrepreneurship, maxPages,
       const qLabel = `${i + 1}/${queries.length}`;
       console.log(`  [search ${qLabel}] [T${qObj.tier}] ${q}`);
       let links = [];
+      let googleLinks = [];
       try {
         const t0 = Date.now();
-        links = await withTimeout(searchGoogle(page, q), 30000, "Google search");
-        console.log(`    Google: ${links.length} link(s) in ${Date.now() - t0}ms`);
+        googleLinks = await withTimeout(searchGoogle(page, q), 30000, "Google search");
+        links = googleLinks;
+        totalGoogleLinks += googleLinks.length;
+        console.log(`    Google: ${googleLinks.length} link(s) in ${Date.now() - t0}ms`);
       } catch (e) {
         console.log(`    Google: failed (${String(e?.message || e).slice(0, 120)})`);
         links = [];
       }
       if (links.length < 2) {
+        let bingLinks = [];
         try {
           const t0 = Date.now();
-          links = await withTimeout(searchBing(page, q), 15000, "Bing search");
-          console.log(`    Bing: ${links.length} link(s) in ${Date.now() - t0}ms`);
+          bingLinks = await withTimeout(searchBing(page, q), 15000, "Bing search");
+          links = bingLinks;
+          totalBingLinks += bingLinks.length;
+          console.log(`    Bing: ${bingLinks.length} link(s) in ${Date.now() - t0}ms`);
         } catch (e) {
           console.log(`    Bing: failed (${String(e?.message || e).slice(0, 120)})`);
         }
@@ -1513,6 +1556,62 @@ async function discoverUrls(browser, universityName, entrepreneurship, maxPages,
     }
   } finally {
     await context.close();
+  }
+
+  const tierPhrase = {
+    1: "student union commercial",
+    2: "student affairs student life",
+    3: "student government",
+    4: entrepreneurship || "entrepreneurship center",
+    5: "multicultural south asian",
+    6: "sustainability",
+    7: "food truck mobile vendor",
+    8: "dining services",
+    9: "environmental health and safety",
+  };
+  const computeDeduped = (urls) => {
+    let d = dedupeUrls(urls).sort((a, b) => urlRelevanceScore(b) - urlRelevanceScore(a));
+    const ng = d.filter((u) => !isGenericCampusPage(u));
+    if (ng.length > 0) d = ng;
+    const sc = d.filter((u) => urlMatchesUniversity(u, markers));
+    if (sc.length > 0) d = sc;
+    return { deduped: d, nonGeneric: ng };
+  };
+
+  let { deduped, nonGeneric } = computeDeduped(collected);
+  if (deduped.length === 0 && primaryDomain && totalGoogleLinks === 0 && totalBingLinks > 0) {
+    console.log(
+      `  ↪ safety net: Google returned 0 while Bing had ${totalBingLinks}; retrying direct site:${primaryDomain} queries`
+    );
+    const retryContext = await browser.newContext({
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      viewport: { width: 1366, height: 864 },
+      locale: "en-US",
+      timezoneId: "America/Los_Angeles",
+    });
+    const retryPage = await retryContext.newPage();
+    try {
+      for (const t of tiers) {
+        const phrase = tierPhrase[t] || "student services";
+        const retryQuery = `site:${primaryDomain} "${phrase}" email`;
+        let retryLinks = [];
+        try {
+          retryLinks = await withTimeout(searchBing(retryPage, retryQuery), 15000, "Bing safety-net search");
+        } catch {
+          retryLinks = [];
+        }
+        for (const raw of retryLinks) {
+          const key = unwrapSearchRedirect(raw);
+          if (!firstTierByUrl.has(key)) firstTierByUrl.set(key, t);
+        }
+        collected.push(...retryLinks);
+        await sleep(Math.min(interSearchDelay, 900));
+      }
+    } finally {
+      await retryContext.close();
+    }
+    ({ deduped, nonGeneric } = computeDeduped(collected));
   }
 
   if (MULTI_STAGE_SEARCH) {
@@ -1542,13 +1641,7 @@ async function discoverUrls(browser, universityName, entrepreneurship, maxPages,
     }
   }
 
-  let deduped = dedupeUrls(collected).sort((a, b) => urlRelevanceScore(b) - urlRelevanceScore(a));
-  const nonGeneric = deduped.filter((u) => !isGenericCampusPage(u));
-  if (nonGeneric.length > 0) deduped = nonGeneric;
-  const scoped = deduped.filter((u) => urlMatchesUniversity(u, markers));
-  if (scoped.length > 0) {
-    deduped = scoped;
-  }
+  ({ deduped, nonGeneric } = computeDeduped(collected));
 
   // Coverage pass: keep at least one URL per selected tier when available.
   const tierBuckets = new Map();

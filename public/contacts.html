@@ -562,8 +562,10 @@
   }
   .wrapper { z-index: 1; }
   .embedded-mode .wrapper {
-    padding-left: 0.5rem;
-    padding-right: 0.5rem;
+    padding-top: 0.85rem;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    padding-bottom: 1.1rem;
     max-width: none;
   }
   .embedded-mode .stats-bar {
@@ -730,6 +732,8 @@ function normalizeContact(raw) {
   const tier = parseTier(raw.tier);
   const tier_label = raw.tier_label || '';
   const email = raw.email ?? raw.Email ?? raw['E-mail'] ?? '';
+  const decisionProximity =
+    raw.decision_proximity_score ?? raw.decision_proximity ?? raw.decisionProximity ?? '';
   return {
     ...raw,
     email,
@@ -741,6 +745,12 @@ function normalizeContact(raw) {
     relevance_note: raw.relevance_note || '',
     relevance_to_biryani_blitz: raw.relevance_to_biryani_blitz || '',
     outreach_angle: raw.outreach_angle || '',
+    suggested_subject_line: raw.suggested_subject_line || '',
+    externality_score: raw.externality_score ?? '',
+    decision_proximity_score: decisionProximity,
+    embedding_similarity: raw.embedding_similarity ?? '',
+    include: raw.include === false ? false : true,
+    exclude_reason: raw.exclude_reason || '',
   };
 }
 
@@ -1019,7 +1029,7 @@ function toggleAll(expand) {
 function exportCSV() {
   const filtered = getFiltered();
   if (!filtered.length) return;
-  const headers = ['university','tier','tier_label','name','title','bio_snippet','relevance_note','relevance_to_biryani_blitz','outreach_angle','externality_score','decision_proximity_score','department','email','phone','confidence','source_url','contacted'];
+  const headers = ['university','tier','tier_label','name','title','bio_snippet','relevance_note','relevance_to_biryani_blitz','outreach_angle','suggested_subject_line','externality_score','decision_proximity_score','embedding_similarity','include','exclude_reason','department','email','phone','confidence','source_url','contacted'];
   const esc = v => `"${String(v ?? '').replace(/"/g,'""')}"`;
   const rows = [headers.join(','), ...filtered.map(c => {
     const row = headers.map(h => {

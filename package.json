@@ -7,8 +7,8 @@
   },
   "scripts": {
     "start": "node server.mjs",
-    "scrape": "node playwright-gemini.mjs",
-    "scrape:batch": "node playwright-gemini.mjs --batch",
+    "scrape": "node scraper/run.mjs",
+    "scrape:batch": "node scraper/run.mjs --batch",
     "gui": "node server.mjs"
   },
   "dependencies": {
