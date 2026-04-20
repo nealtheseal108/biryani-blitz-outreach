@@ -34,7 +34,7 @@
   body::before {
     content: '';
     position: fixed;
-    inset: 0;
+    inset: -24px;
     background:
       radial-gradient(ellipse 85% 65% at 12% 18%, rgba(255, 95, 45, 0.42), transparent 58%),
       radial-gradient(ellipse 70% 55% at 88% 12%, rgba(210, 55, 95, 0.32), transparent 52%),
@@ -516,8 +516,6 @@
   /* Biryani Blitz re-skin + no glass + typography direction */
   body { cursor: none; }
   body::before {
-    transform: translate(calc(var(--px, 0) * -8px), calc(var(--py, 0) * -8px));
-    transition: transform 0.12s linear;
     background:
       radial-gradient(ellipse 60% 50% at 14% 20%, rgba(255, 238, 222, 0.18), transparent 62%),
       radial-gradient(ellipse 60% 50% at 84% 78%, rgba(250, 173, 117, 0.35), transparent 60%),
@@ -526,12 +524,16 @@
   body::after {
     content: '';
     position: fixed;
-    inset: -10%;
+    inset: -14%;
     pointer-events: none;
     z-index: 0;
-    transform: translate(calc(var(--px, 0) * 10px), calc(var(--py, 0) * 10px));
-    transition: transform 0.15s linear;
-    background: radial-gradient(ellipse 45% 35% at 50% 55%, rgba(255, 238, 222, 0.12), transparent 70%);
+    transition: background-position 0.08s linear;
+    background: radial-gradient(
+      circle 320px at var(--mx, 50vw) var(--my, 50vh),
+      rgba(255, 238, 222, 0.18),
+      rgba(255, 238, 222, 0.06) 35%,
+      transparent 72%
+    );
   }
   h1, .uni-name {
     font-family: var(--font-exo);
@@ -1106,10 +1108,8 @@ bootstrap();
         },
         '*'
       );
-      const px = (e.clientX / window.innerWidth - 0.5) * 2;
-      const py = (e.clientY / window.innerHeight - 0.5) * 2;
-      document.body.style.setProperty('--px', String(px));
-      document.body.style.setProperty('--py', String(py));
+      document.body.style.setProperty('--mx', `${e.clientX}px`);
+      document.body.style.setProperty('--my', `${e.clientY}px`);
     });
     return;
   }
@@ -1119,10 +1119,8 @@ bootstrap();
   window.addEventListener('mousemove', (e) => {
     tx = e.clientX;
     ty = e.clientY;
-    const px = (e.clientX / window.innerWidth - 0.5) * 2;
-    const py = (e.clientY / window.innerHeight - 0.5) * 2;
-    document.body.style.setProperty('--px', String(px));
-    document.body.style.setProperty('--py', String(py));
+    document.body.style.setProperty('--mx', `${e.clientX}px`);
+    document.body.style.setProperty('--my', `${e.clientY}px`);
   });
   const tick = () => {
     rx += (tx - rx) * 0.14;

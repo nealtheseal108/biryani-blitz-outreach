@@ -429,8 +429,6 @@
       background: linear-gradient(140deg, #a14123 0%, #cd4d27 40%, #f15e22 100%);
     }
     body::before {
-      transform: translate(calc(var(--px, 0) * -8px), calc(var(--py, 0) * -8px));
-      transition: transform 0.12s linear;
       background:
         radial-gradient(ellipse 60% 50% at 14% 20%, rgba(255, 238, 222, 0.18), transparent 62%),
         radial-gradient(ellipse 60% 50% at 84% 78%, rgba(250, 173, 117, 0.35), transparent 60%),
@@ -442,9 +440,13 @@
       inset: -10%;
       pointer-events: none;
       z-index: 0;
-      transform: translate(calc(var(--px, 0) * 10px), calc(var(--py, 0) * 10px));
-      transition: transform 0.15s linear;
-      background: radial-gradient(ellipse 45% 35% at 50% 55%, rgba(255, 238, 222, 0.12), transparent 70%);
+      transition: background-position 0.08s linear;
+      background: radial-gradient(
+        circle 360px at var(--mx, 50vw) var(--my, 50vh),
+        rgba(255, 238, 222, 0.16),
+        rgba(255, 238, 222, 0.06) 35%,
+        transparent 72%
+      );
     }
     header h1 {
       font-family: var(--font-exo);
@@ -806,10 +808,8 @@ UC Berkeley"></textarea>
       window.addEventListener("mousemove", (e) => {
         tx = e.clientX;
         ty = e.clientY;
-        const px = (e.clientX / window.innerWidth - 0.5) * 2;
-        const py = (e.clientY / window.innerHeight - 0.5) * 2;
-        document.body.style.setProperty("--px", String(px));
-        document.body.style.setProperty("--py", String(py));
+        document.body.style.setProperty("--mx", `${e.clientX}px`);
+        document.body.style.setProperty("--my", `${e.clientY}px`);
       });
       const frame = document.querySelector(".data-frame");
       if (frame) {
@@ -819,10 +819,8 @@ UC Berkeley"></textarea>
           const rect = frame.getBoundingClientRect();
           tx = rect.left + Number(d.x || 0);
           ty = rect.top + Number(d.y || 0);
-          const px = (tx / window.innerWidth - 0.5) * 2;
-          const py = (ty / window.innerHeight - 0.5) * 2;
-          document.body.style.setProperty("--px", String(px));
-          document.body.style.setProperty("--py", String(py));
+          document.body.style.setProperty("--mx", `${tx}px`);
+          document.body.style.setProperty("--my", `${ty}px`);
         });
       }
       const tick = () => {
