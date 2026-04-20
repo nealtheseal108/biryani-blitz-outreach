@@ -698,6 +698,7 @@ let contactChecks = {};
 let checkSaveTimer = null;
 const DEMO_MODE = new URLSearchParams(window.location.search).get('demo') === '1';
 let demoRunIsActive = false;
+let dashboardLockedUntilReload = false;
 
 /** Unique key for Done checkbox + persistence: real email when present, else university+name. */
 function stableContactKey(c) {
@@ -964,38 +965,12 @@ function render() {
         ? `<td class="td-check"><input type="checkbox" class="contact-done" data-contact-key="${encodeURIComponent(ck)}" aria-label="Marked as contacted"${checked} /></td>`
         : '<td class="td-check"><input type="checkbox" class="contact-done contact-done-disabled" disabled title="No name or university on this row" aria-label="Cannot mark — missing row id" /></td>';
 
-      const bio = (c.bio_snippet && String(c.bio_snippet).trim()) ? escapeHtml(c.bio_snippet) : '—';
-      const verifiedBioRaw = String(c.specific_reason || c.bio_snippet || '').trim();
-      const verifiedBio =
-        verifiedBioRaw.length > 120
-          ? `${escapeHtml(verifiedBioRaw.slice(0, 117))}…`
-          : verifiedBioRaw
-            ? escapeHtml(verifiedBioRaw)
-            : '—';
-      const whyRaw = String(c.relevance_to_biryani_blitz || c.relevance_note || '').trim();
-      const relPreview =
-        whyRaw.length > 140 ? `${escapeHtml(whyRaw.slice(0, 137))}…` : whyRaw ? escapeHtml(whyRaw) : '—';
-      const relFull = whyRaw ? escapeHtml(whyRaw) : '';
-      const angle = String(c.outreach_angle || '').trim();
-      const angleEsc = angle ? escapeHtml(angle) : '';
-      const briefBlock =
-        whyRaw.length > 140 || angle
-          ? `<details class="brief-expand">
-            <summary>Full briefing</summary>
-            <div class="brief-body">
-              ${whyRaw ? `<p><strong>Why Biryani</strong> ${relFull}</p>` : ''}
-              ${angle ? `<p><strong>Outreach angle</strong> ${angleEsc}</p>` : ''}
-            </div>
-          </details>`
-          : '';
       return `<tr>
         ${checkCell}
         <td class="email-cell">${emailHtml}</td>
         <td>${tierPill(c.tier)}</td>
         <td class="name-cell">${escapeHtml(c.name) || '—'}</td>
         <td>${escapeHtml(c.title) || '—'}</td>
-        <td>${verifiedBio}</td>
-        <td class="notes-cell"><div class="note-bio">${bio}</div><div class="note-rel">${relPreview}</div>${briefBlock}</td>
         <td>${phoneHtml}</td>
         <td><span class="${confClass}"><span class="conf-dot"></span><span class="conf-text">${escapeHtml(c.confidence) || '—'}</span></span></td>
       </tr>`;
@@ -1018,8 +993,6 @@ function render() {
           <thead><tr>
             <th class="th-check" title="You’ve reached out">Done</th>
             <th>Email</th><th>Category</th><th>Name</th><th>Title</th>
-            <th>Verified bio</th>
-            <th>Bio &amp; relevance</th>
             <th>Phone</th><th>Conf.</th>
           </tr></thead>
           <tbody>${rows}</tbody>
@@ -1073,6 +1046,7 @@ function contactListSignature(list) {
 }
 
 async function pullContactsFromServer() {
+  if (dashboardLockedUntilReload && allContacts.length > 0) return;
   const r = await fetch(DEMO_MODE ? '/api/contacts?demo=1' : '/api/contacts');
   if (!r.ok) return;
   const data = await r.json();
@@ -1085,6 +1059,7 @@ async function pullContactsFromServer() {
     return;
   }
   allContacts = next;
+  if (allContacts.length > 0) dashboardLockedUntilReload = true;
   updateStats();
   render();
 }
