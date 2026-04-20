@@ -54,8 +54,19 @@ export function buildDomainAnchoredQueries(domain, tier) {
   return queries;
 }
 
-export async function discoverUrlsForUniversity({ browser, university, tiers, llmClient, pagesPerSchool = 8 }) {
-  const { domain, searchName } = await resolveUniversityDomain(university, llmClient);
+export async function discoverUrlsForUniversity({
+  browser,
+  university,
+  tiers,
+  llmClient,
+  pagesPerSchool = 8,
+  primaryDomain = "",
+  nameFirstQueries = null,
+  hypothesis = null,
+}) {
+  const resolved = await resolveUniversityDomain(university, llmClient);
+  const domain = String(primaryDomain || resolved.domain || "").trim();
+  const searchName = resolved.searchName;
   const enrichedUni = { ...university, searchName };
   const context = await browser.newContext();
   const page = await context.newPage();
@@ -63,8 +74,14 @@ export async function discoverUrlsForUniversity({ browser, university, tiers, ll
   const urls = [];
   try {
     for (const t of tiers || []) {
-      const hypothesis = await resolvePersonForTier(enrichedUni, domain, t, llmClient);
-      let queries = buildNameFirstQueries(hypothesis, enrichedUni, domain);
+      const tierHypothesis =
+        hypothesis && (hypothesis.tier == null || Number(hypothesis.tier) === Number(t))
+          ? hypothesis
+          : await resolvePersonForTier(enrichedUni, domain, t, llmClient);
+      let queries =
+        Array.isArray(nameFirstQueries) && nameFirstQueries.length
+          ? [...nameFirstQueries]
+          : buildNameFirstQueries(tierHypothesis, enrichedUni, domain);
       if (!queries.length) queries = buildDomainAnchoredQueries(domain, t);
       for (const q of queries) {
         let links = [];

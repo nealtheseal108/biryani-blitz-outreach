@@ -4,6 +4,7 @@ import { extractCandidates } from "./extract.mjs";
 import { ContactScorer, scoreBioRelevance } from "./score.mjs";
 import { generateBrief } from "./brief.mjs";
 import { resolveUniversityDomain } from "./search.mjs";
+import { buildNameFirstQueries, resolvePersonForTier } from "./resolve.mjs";
 
 function dedupeByEmail(rows) {
   const seen = new Set();
@@ -34,16 +35,33 @@ function dedupeLoose(rows) {
   return out;
 }
 
+function round4(n) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return 0;
+  return Number(x.toFixed(4));
+}
+
 export async function runPipeline(university, opts) {
   const { browser, llmClient, embeddingClient, tiers, maxPages } = opts;
   const { domain } = await resolveUniversityDomain(university, llmClient);
-  const urls = await discoverUrlsForUniversity({
-    browser,
-    university,
-    tiers,
-    llmClient,
-    pagesPerSchool: maxPages,
-  });
+  const allUrls = [];
+  const perTierPages = Math.max(1, Math.ceil(maxPages / Math.max(1, (tiers || []).length)));
+  for (const tier of tiers || []) {
+    const hypothesis = await resolvePersonForTier(university, domain, tier, llmClient);
+    const tierNameFirst = buildNameFirstQueries(hypothesis, university, domain);
+    const tierUrls = await discoverUrlsForUniversity({
+      browser,
+      university,
+      tiers: [tier],
+      llmClient,
+      pagesPerSchool: perTierPages,
+      primaryDomain: domain,
+      nameFirstQueries: tierNameFirst,
+      hypothesis: { ...hypothesis, tier },
+    });
+    allUrls.push(...tierUrls);
+  }
+  const urls = dedupeLoose(allUrls);
 
   const scorer = new ContactScorer(embeddingClient);
   await scorer.initialize();
@@ -71,13 +89,31 @@ export async function runPipeline(university, opts) {
       }
 
       const scored = await scorer.scoreContact(working);
-      const bioScore = await scoreBioRelevance(scored, llmClient);
+      const similarity = Number(scored.embedding_similarity || 0);
+      const isElectedStudent =
+        /\b(president|vice president|vp|chair|representative)\b/i.test(String(scored.title || "")) &&
+        /studentgov|student-gov|asuc|sg\.|stu-gov|student-association/i.test(String(scored.source_url || ""));
+      const needsBioScorer = similarity >= 0.55 && similarity < 0.85;
+      const isDefiniteInclude = similarity >= 0.85 || (scored.include && isElectedStudent);
+      const isDefiniteExclude = similarity < 0.45;
+
+      let bioScore = null;
+      let finalInclude = scored.include;
+      if (!isDefiniteInclude && !isDefiniteExclude && needsBioScorer) {
+        bioScore = await scoreBioRelevance(scored, llmClient);
+        finalInclude = bioScore.include === true;
+      } else if (isDefiniteExclude) {
+        finalInclude = false;
+      } else {
+        finalInclude = scored.include;
+      }
+
       const merged = {
         ...scored,
-        include: bioScore.include === true && scored.include !== false,
-        externality_score: Number(bioScore.externality_score ?? scored.externality_score ?? 0),
-        decision_proximity: Number(bioScore.decision_proximity ?? scored.decision_proximity ?? 0),
-        specific_reason: bioScore.specific_reason || scored.exclude_reason || "",
+        include: finalInclude,
+        externality_score: round4(bioScore?.externality_score ?? scored.externality_score ?? 0),
+        decision_proximity: round4(bioScore?.decision_proximity ?? scored.decision_proximity ?? 0),
+        specific_reason: bioScore?.specific_reason || scored.exclude_reason || "",
       };
 
       if (!merged.include) {
@@ -85,7 +121,7 @@ export async function runPipeline(university, opts) {
           ...merged,
           exclude_reason: merged.exclude_reason || merged.specific_reason || "scored out",
         });
-        if (bioScore.forward_to_title) {
+        if (bioScore?.forward_to_title) {
           leads.push({
             university: university.name,
             domain,
