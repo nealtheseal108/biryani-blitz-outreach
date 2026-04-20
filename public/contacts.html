@@ -697,6 +697,7 @@ let uniRankMap = {};
 let contactChecks = {};
 let checkSaveTimer = null;
 let emptyServerPullStreak = 0;
+const DEMO_MODE = new URLSearchParams(window.location.search).get('demo') === '1';
 
 /** Unique key for Done checkbox + persistence: real email when present, else university+name. */
 function stableContactKey(c) {
@@ -1068,7 +1069,7 @@ function contactListSignature(list) {
 }
 
 async function pullContactsFromServer() {
-  const r = await fetch('/api/contacts');
+  const r = await fetch(DEMO_MODE ? '/api/contacts?demo=1' : '/api/contacts');
   if (!r.ok) return;
   const data = await r.json();
   if (!Array.isArray(data)) return;

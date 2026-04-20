@@ -334,6 +334,7 @@ let child = null;
 const logLines = [];
 const MAX_LOG = 500;
 let demoContactsArmed = false;
+let demoContactsReady = false;
 
 function pushLog(line) {
   const s = String(line).replace(/\r$/, "");
@@ -412,7 +413,8 @@ app.post("/api/outreach-state", (req, res) => {
 /** Merged contacts outputs (deduped by email). */
 app.get("/api/contacts", (req, res) => {
   try {
-    if (DEMO_BERKELEY_CONTACTS && demoContactsArmed) {
+    const demoRequested = String(req.query.demo || "") === "1";
+    if (DEMO_BERKELEY_CONTACTS && demoContactsArmed && demoContactsReady && demoRequested) {
       return res.json(BERKELEY_DEMO_CONTACTS);
     }
     const merged = new Map();
@@ -498,6 +500,7 @@ app.post("/api/stop", (req, res) => {
       /* empty */
     }
     child = null;
+    demoContactsReady = false;
     pushLog("Stopped by user.");
   }
   res.json({ ok: true });
@@ -586,8 +589,10 @@ app.post("/api/start", (req, res) => {
   };
 
   if (DEMO_BERKELEY_CONTACTS) {
-    // Demo contacts become visible only after explicit "Send & run".
+    // Demo contacts are requested only after explicit "Send & run",
+    // but are released only when the fake run fully finishes.
     demoContactsArmed = true;
+    demoContactsReady = false;
   }
 
   child = spawn(process.execPath, args, { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
@@ -595,10 +600,14 @@ app.post("/api/start", (req, res) => {
   child.stderr.on("data", (d) => pushLog(d.toString()));
   child.on("close", (code) => {
     pushLog(`Process exited with code ${code}`);
+    if (DEMO_BERKELEY_CONTACTS) {
+      demoContactsReady = code === 0;
+    }
     child = null;
   });
   child.on("error", (e) => {
     pushLog(`Spawn error: ${e.message}`);
+    demoContactsReady = false;
     child = null;
   });
 
