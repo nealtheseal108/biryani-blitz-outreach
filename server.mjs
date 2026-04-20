@@ -107,11 +107,12 @@ app.post("/api/outreach-state", (req, res) => {
   }
 });
 
-/** Merged contacts from Gemini + Anthropic pipeline outputs (deduped by email). */
+/** Merged contacts outputs (deduped by email). */
 app.get("/api/contacts", (req, res) => {
   try {
     const merged = new Map();
     const files = [
+      path.join(ROOT, "output", "contacts.json"),
       path.join(ROOT, "output", "gemini_contacts.json"),
       path.join(ROOT, "output", "biryani_blitz_contacts.json"),
     ];
@@ -240,7 +241,7 @@ app.post("/api/start", (req, res) => {
     return res.status(400).json({ error: `Missing data file: ${dataPath}` });
   }
 
-  const outPath = body.out || "output/gemini_contacts.json";
+  const outPath = body.out || "output/contacts.json";
   const outAbs = path.isAbsolute(outPath) ? outPath : path.join(ROOT, outPath);
 
   const args = [

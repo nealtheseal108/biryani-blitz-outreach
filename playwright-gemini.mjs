@@ -37,6 +37,9 @@ const API_KEY = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
 const LLM_PROVIDER = (process.env.LLM_PROVIDER || "gemini").toLowerCase();
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "meta-llama/llama-3.1-8b-instruct:free";
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+const EMBEDDING_PROVIDER = (process.env.EMBEDDING_PROVIDER || "openai").toLowerCase();
+const EMBEDDING_INCLUDE_THRESHOLD = Number(process.env.EMBEDDING_INCLUDE_THRESHOLD || "0.72");
 const SEARCH_LLM_TERMS = process.env.SEARCH_LLM_TERMS !== "0";
 const MULTI_STAGE_SEARCH = process.env.MULTI_STAGE_SEARCH !== "0";
 /** Expand "UT Austin" → full official name for search + contact rows (OpenRouter). Set CANONICAL_UNIVERSITY_NAMES=0 to disable. */
@@ -53,6 +56,28 @@ const CONTACT_SCORER = (process.env.CONTACT_SCORER || "auto").toLowerCase();
 const ENRICH_OUTREACH_CARDS = process.env.ENRICH_OUTREACH_CARDS !== "0";
 
 const DEFAULT_DATA = path.join("data", "universities.json");
+const TIER_LABELS = {
+  1: "Student Union / Commercial — contract gatekeeper",
+  2: "Student Life — internal champion",
+  3: "Student Government — board advocate",
+  4: "Entrepreneurship — credibility builder",
+  5: "Cultural Center — South Asian audience",
+  6: "Sustainability — vendor database listing",
+  7: "Food Truck Coordinator — fast placement path",
+  8: "Campus Dining — approach last",
+  9: "EHS / Food Safety — pre-clearance step",
+};
+const IDEAL_CONTACT_EMBEDDING_TEXT = {
+  1: "A person whose job requires evaluating and approving external food vendors and commercial partnerships within a university student union building.",
+  2: "A director or coordinator who designs student experience programs and is looking for novel services that improve campus life.",
+  3: "An elected student representative whose role is to advocate for student interests, evaluate new campus services, and influence university board decisions.",
+  4: "A program director at a university entrepreneurship center who works directly with student-founded startups and helps them access campus resources.",
+  5: "A director of multicultural student affairs or South Asian cultural programming who organizes events and manages vendor relationships for cultural programs.",
+  6: "A sustainability coordinator who manages a university food vendor database and approves vendors based on environmental criteria.",
+  7: "A coordinator who manages food truck permits and mobile vendor scheduling within university union spaces.",
+  8: "A catering or special events coordinator within campus dining who handles outside vendor approvals for specific events.",
+  9: "An environmental health and safety coordinator who processes food safety permits and inspects food equipment for compliance.",
+};
 
 /** Verbatim outreach mandate + tier routing guidance for the post-extract LLM scorer (job externality, not org-chart seniority). */
 const BIRYANI_MANDATE_TIER_GUIDANCE = `
@@ -127,8 +152,9 @@ function parseArgs() {
     urls: [],
     university: "",
     dataPath: DEFAULT_DATA,
-    out: path.join("output", "gemini_contacts.json"),
-    inferredOut: path.join("output", "inferred_contacts.json"),
+    out: path.join("output", "contacts.json"),
+    excludedOut: path.join("output", "excluded.json"),
+    inferredOut: path.join("output", "inferred.json"),
     max: null,
     start: 0,
     pagesPerSchool: 5,
@@ -144,6 +170,7 @@ function parseArgs() {
     else if (a === "--url") opts.urls.push(args[++i]);
     else if (a === "--university") opts.university = args[++i] || "";
     else if (a === "--out") opts.out = args[++i] || opts.out;
+    else if (a === "--excluded-out") opts.excludedOut = args[++i] || opts.excludedOut;
     else if (a === "--inferred-out") opts.inferredOut = args[++i] || opts.inferredOut;
     else if (a === "--data") opts.dataPath = args[++i] || opts.dataPath;
     else if (a === "--max") opts.max = parseInt(args[++i], 10);
@@ -639,6 +666,168 @@ function extractEmailsFromRawHtml(html) {
     emails.add(e);
   }
   return [...emails];
+}
+
+function extractContextWindow(bodyText, marker, radius = 150) {
+  const text = String(bodyText || "");
+  const needle = String(marker || "").trim();
+  if (!text || !needle) return "";
+  const idx = text.toLowerCase().indexOf(needle.toLowerCase());
+  if (idx < 0) return "";
+  return text.slice(Math.max(0, idx - radius), Math.min(text.length, idx + needle.length + radius));
+}
+
+function fallbackHashEmbedding(text, dims = 192) {
+  const vec = new Array(dims).fill(0);
+  const toks = String(text || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((t) => t.length > 1);
+  for (const t of toks) {
+    let h = 2166136261;
+    for (let i = 0; i < t.length; i++) {
+      h ^= t.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    const idx = Math.abs(h) % dims;
+    vec[idx] += 1;
+  }
+  const mag = Math.sqrt(vec.reduce((s, v) => s + v * v, 0)) || 1;
+  return vec.map((v) => v / mag);
+}
+
+async function embedText(text) {
+  const provider = EMBEDDING_PROVIDER;
+  if (provider === "openai" && OPENAI_API_KEY) {
+    const resp = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "text-embedding-3-small",
+        input: String(text || "").slice(0, 8000),
+      }),
+    });
+    if (!resp.ok) {
+      const t = await resp.text().catch(() => "");
+      throw new Error(`OpenAI embeddings ${resp.status}: ${t.slice(0, 180)}`);
+    }
+    const data = await resp.json();
+    const emb = data?.data?.[0]?.embedding;
+    if (!Array.isArray(emb) || emb.length === 0) throw new Error("OpenAI embeddings: missing vector");
+    return emb;
+  }
+  return fallbackHashEmbedding(text);
+}
+
+function cosineSimilarity(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length === 0 || b.length === 0) return 0;
+  const n = Math.min(a.length, b.length);
+  let dot = 0;
+  let ma = 0;
+  let mb = 0;
+  for (let i = 0; i < n; i++) {
+    const av = Number(a[i]) || 0;
+    const bv = Number(b[i]) || 0;
+    dot += av * bv;
+    ma += av * av;
+    mb += bv * bv;
+  }
+  const denom = Math.sqrt(ma) * Math.sqrt(mb);
+  return denom > 0 ? dot / denom : 0;
+}
+
+let cachedIdealTierEmbeddings = null;
+async function getIdealTierEmbeddings() {
+  if (cachedIdealTierEmbeddings) return cachedIdealTierEmbeddings;
+  const out = {};
+  for (const [tier, text] of Object.entries(IDEAL_CONTACT_EMBEDDING_TEXT)) {
+    out[String(tier)] = await embedText(text);
+  }
+  cachedIdealTierEmbeddings = out;
+  return out;
+}
+
+function scoreExcludeReason(contact, similarity) {
+  const title = String(contact?.title || "").toLowerCase();
+  if (/professor|faculty|instructor|lecturer|researcher/.test(title)) return "academic / faculty";
+  if (/^(vice chancellor|provost|president|chancellor|dean)\b/.test(title)) return "too senior / wrong entry point";
+  if (/\bassistant to\b/.test(title)) return "internal ops only";
+  if (!normalizeEmail(contact?.email)) return "email not found on page";
+  if (similarity < 0.5) return "no external vendor mandate";
+  return "below similarity threshold";
+}
+
+async function scoreContactsByEmbedding(rows, pageText) {
+  if (!rows?.length) return [];
+  const ideal = await getIdealTierEmbeddings();
+  const scored = [];
+  for (const c of rows) {
+    const pageContext =
+      String(c.pageContext || "").trim() ||
+      extractContextWindow(pageText, c.email || c.name || "", 150);
+    const contactText = [c.title, c.department, pageContext].filter(Boolean).join(". ");
+    if (!String(contactText).trim()) {
+      scored.push({
+        ...c,
+        pageContext,
+        embedding_similarity: 0,
+        externality_score: 0,
+        decision_proximity_score: 0,
+        include: false,
+        exclude_reason: "no external vendor mandate",
+      });
+      continue;
+    }
+    const emb = await embedText(contactText);
+    let bestTier = null;
+    let best = -1;
+    for (const [tier, idealEmb] of Object.entries(ideal)) {
+      const sim = cosineSimilarity(emb, idealEmb);
+      if (sim > best) {
+        best = sim;
+        bestTier = Number(tier);
+      }
+    }
+    const elected = isElectedStudentOrgFastPath(c.title, c.source_url || "");
+    const ext = Math.max(0, Math.min(1, best));
+    const decision = Math.max(0, Math.min(1, 0.55 * ext + (elected ? 0.35 : 0)));
+    const hasEmail = !!normalizeEmail(c.email);
+    const include =
+      elected ||
+      (hasEmail &&
+        !["too senior / wrong entry point", "academic / faculty"].includes(scoreExcludeReason(c, best)) &&
+        best >= EMBEDDING_INCLUDE_THRESHOLD);
+    scored.push({
+      ...c,
+      pageContext,
+      tier: bestTier ?? c.tier ?? null,
+      embedding_similarity: Number(best.toFixed(4)),
+      externality_score: Number(ext.toFixed(4)),
+      decision_proximity_score: Number(decision.toFixed(4)),
+      include,
+      exclude_reason: include ? null : scoreExcludeReason(c, best),
+    });
+  }
+  return scored;
+}
+
+function dedupeContactsStable(rows) {
+  const seen = new Set();
+  const out = [];
+  for (const row of rows || []) {
+    const email = normalizeEmail(row?.email);
+    const key =
+      email ||
+      `${String(row?.university || "").toLowerCase()}|${String(row?.source_url || "").toLowerCase()}|${String(row?.name || "").toLowerCase()}|${String(row?.title || "").toLowerCase()}`;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
 }
 
 function emailLooksLiteral(email, bodyText, mailtos, htmlEmails) {
@@ -1461,13 +1650,25 @@ async function fetchPage(browser, url) {
     const rawHtml = await page.content();
     const mailtos = await extractMailtos(page);
     const htmlEmails = extractEmailsFromRawHtml(rawHtml);
+    const allEmailObjects = [
+      ...(mailtos || []).map((m) => ({ email: normalizeEmail(m?.email) })),
+      ...htmlEmails.map((e) => ({ email: normalizeEmail(e) })),
+    ].filter((x) => x.email && x.email.includes("@"));
+    const contextWindows = {};
+    for (const e of allEmailObjects) {
+      if (contextWindows[e.email]) continue;
+      const ctx = extractContextWindow(bodyText, e.email, 150);
+      if (ctx) contextWindows[e.email] = ctx;
+    }
     return {
+      url,
       finalUrl: page.url(),
       title,
       bodyText: bodyText.slice(0, 100000),
       rawHtml: rawHtml.slice(0, 400000),
       mailtos,
       htmlEmails,
+      contextWindows,
     };
   } finally {
     await page.close();
@@ -1941,6 +2142,11 @@ Each object MUST use this shape:
 }
 
 Rules:
+- Use this workflow:
+  1) Start from explicit emails on the page (mailto + visible/HTML emails) and identify the person tied to each email.
+  2) Determine whether that person is student-facing or external-partner-facing (vendor/commercial/programs/events/permits/student advocacy).
+  3) If you find one strong candidate, scan nearby names/titles on the same page section (staff list, directory block, board list) because relevant contacts are often grouped.
+- We only want contacts who are student-facing or external-partner-facing. Internal-only admin/research roles should be include:false.
 - If include is false, still return the object for audit; set relevance_to_biryani_blitz and outreach_angle to null unless you need a brief justification only in exclude_reason.
 - Never fabricate emails. If no email on page, set email null and include false.
 - The relevance sentence must be specific to THIS person's role, not generic.
@@ -1958,14 +2164,39 @@ function confidenceFromBriefingScores(c) {
   return "low";
 }
 
+function looksStudentOrExternalFacingRole(row) {
+  const title = String(row?.title || "").toLowerCase();
+  const rel = String(row?.relevance_to_biryani_blitz || "").toLowerCase();
+  const hay = `${title} ${rel}`;
+  if (!hay.trim()) return false;
+  if (isElectedStudentOrgFastPath(title, String(row?.source_url || ""))) return true;
+  const positive =
+    /\b(student|government|union|engagement|experience|life|programs?|events?|partnerships?|vendor|commercial|auxiliar|dining|food truck|mobile vendor|sustainability|zero waste|multicultural|cultural|ehs|environmental health|food safety|permit|compliance|services?)\b/i;
+  const negative =
+    /\b(professor|faculty|research|lecturer|instructor|laboratory|lab manager|it support|hr|human resources|payroll|registrar|bursar|accounting|internal audit)\b/i;
+  return positive.test(hay) && !negative.test(hay);
+}
+
 function normalizeBriefingRows(rows, sourceUrl, universityLabel) {
   if (!Array.isArray(rows)) return [];
-  return rows.map((r) => ({
-    ...r,
-    source_url: r.source_url || sourceUrl,
-    university: universityLabel || r.university,
-    confidence: r.confidence || confidenceFromBriefingScores(r),
-  }));
+  return rows.map((r) => {
+    const row = {
+      ...r,
+      source_url: r.source_url || sourceUrl,
+      university: universityLabel || r.university,
+      confidence: r.confidence || confidenceFromBriefingScores(r),
+    };
+    if (row.include === true && !looksStudentOrExternalFacingRole(row)) {
+      return {
+        ...row,
+        include: false,
+        exclude_reason: row.exclude_reason || "no external vendor mandate",
+        relevance_to_biryani_blitz: null,
+        outreach_angle: null,
+      };
+    }
+    return row;
+  });
 }
 
 async function geminiExtract({
@@ -2264,7 +2495,7 @@ async function enrichOutreachCards(contacts, ctx) {
   }
 }
 
-async function processUrls(browser, urls, universityLabel, allContacts, allInferred, tierFocus, ctx) {
+async function processUrls(browser, urls, universityLabel, allContacts, allExcluded, allInferred, tierFocus, ctx) {
   const seenEmails = ctx.seenEmails;
   const subdomainCounts = ctx.subdomainCounts;
   const cap = SUBDOMAIN_CONTACT_CAP;
@@ -2328,14 +2559,6 @@ async function processUrls(browser, urls, universityLabel, allContacts, allInfer
       continue;
     }
 
-    const auditExcluded = (contacts || []).filter((c) => c && c.include === false);
-    if (auditExcluded.length) {
-      console.log(
-        `      ↪ briefing extraction: ${auditExcluded.length} row(s) include:false (audit only, not saved)`
-      );
-    }
-    contacts = (contacts || []).filter((c) => c && c.include !== false && normalizeEmail(c.email));
-
     const withMeta = (contacts || []).map((c) => {
       const email = normalizeEmail(c.email);
       const literal = emailLooksLiteral(email, snap.bodyText, snap.mailtos, htmlSet);
@@ -2344,6 +2567,10 @@ async function processUrls(browser, urls, universityLabel, allContacts, allInfer
       const bio =
         String(c.bio_snippet || "").trim() ||
         [c.name, c.title].filter(Boolean).join(" — ").slice(0, 280);
+      const pageContext =
+        String(c.pageContext || "").trim() ||
+        (email && snap.contextWindows?.[email]) ||
+        extractContextWindow(snap.bodyText, c.name || c.title || "", 150);
       return {
         ...c,
         email,
@@ -2351,50 +2578,92 @@ async function processUrls(browser, urls, universityLabel, allContacts, allInfer
         university: universityLabel,
         tier_label: tierNum ? `Tier ${tierNum}` : null,
         evidence: literal ? "literal" : "inferred",
+        source_url: snap.finalUrl,
+        pageContext,
         relevance_note: rel || String(c.relevance_note || "").trim(),
         bio_snippet: bio,
       };
     });
 
-    const titleFiltered = await filterContactsByMandate(withMeta, snap.bodyText, snap.finalUrl);
-    const enriched = await enrichOutreachCards(titleFiltered, {
+    const extractionExcluded = withMeta.filter((c) => c && c.include === false);
+    for (const row of extractionExcluded) {
+      allExcluded.push({
+        ...row,
+        include: false,
+        exclude_reason: row.exclude_reason || "excluded by extraction prompt",
+      });
+    }
+
+    const scored = await scoreContactsByEmbedding(
+      withMeta.filter((c) => c && c.include !== false),
+      snap.bodyText
+    );
+
+    const keptForBrief = [];
+    for (const row of scored) {
+      if (row.include) keptForBrief.push(row);
+      else allExcluded.push(row);
+    }
+
+    const enriched = await enrichOutreachCards(keptForBrief, {
       pageTitle: snap.title,
       bodyText: snap.bodyText,
       sourceUrl: snap.finalUrl,
       university: universityLabel,
     });
+
     const routed = enriched.map((row) => {
-      const t = row.mandate_tier_suggested != null ? row.mandate_tier_suggested : row.tier;
-      return { ...row, tier: t, tier_label: t != null ? `Tier ${t}` : null };
+      const t = row.tier;
+      return {
+        ...row,
+        tier: t,
+        tier_label: t != null ? TIER_LABELS[t] || `Tier ${t}` : null,
+      };
     });
     let addedConfirmed = 0;
+    let addedExcluded = 0;
     let addedInferred = 0;
 
     for (const row of routed) {
-      if (!row.email || !row.email.includes("@")) continue;
-      if (seenEmails.has(row.email)) continue;
+      const email = normalizeEmail(row.email);
+      if (!email || !email.includes("@")) {
+        allInferred.push({
+          ...row,
+          email: null,
+          confidence: row.confidence || "inferred",
+          include: true,
+          exclude_reason: null,
+        });
+        addedInferred++;
+        continue;
+      }
+      if (seenEmails.has(email)) continue;
 
       if (VERIFY_MX) {
-        const ok = await verifyEmailMx(row.email);
+        const ok = await verifyEmailMx(email);
         if (!ok) {
-          console.log(`      ↪ drop (no MX for domain): ${row.email}`);
+          allExcluded.push({
+            ...row,
+            email,
+            include: false,
+            exclude_reason: "email domain has no MX record",
+          });
+          addedExcluded++;
+          console.log(`      ↪ drop (no MX for domain): ${email}`);
           continue;
         }
       }
 
       const h = hostnameKey(row.source_url || snap.finalUrl);
-      if (row.evidence === "inferred") {
-        allInferred.push(row);
-        addedInferred++;
-      } else {
-        allContacts.push(row);
-        addedConfirmed++;
-      }
-      seenEmails.add(row.email);
+      allContacts.push({ ...row, email, include: true, exclude_reason: null });
+      addedConfirmed++;
+      seenEmails.add(email);
       if (h) subdomainCounts.set(h, (subdomainCounts.get(h) || 0) + 1);
     }
 
-    console.log(`      ✓ +${addedConfirmed} confirmed · +${addedInferred} inferred (review file)`);
+    console.log(
+      `      ✓ +${addedConfirmed} confirmed · +${addedExcluded} excluded · +${addedInferred} inferred`
+    );
   }
 }
 
@@ -2407,6 +2676,7 @@ async function runBatch(opts) {
   if (Number.isFinite(opts.max) && opts.max > 0) list = list.slice(0, opts.max);
 
   fs.mkdirSync(path.dirname(opts.out) || ".", { recursive: true });
+  fs.mkdirSync(path.dirname(opts.excludedOut) || ".", { recursive: true });
   fs.mkdirSync(path.dirname(opts.inferredOut) || ".", { recursive: true });
 
   const tierList = normalizeTiers(opts.tiers);
@@ -2422,9 +2692,13 @@ async function runBatch(opts) {
   );
   console.log(`Domain-anchored @.edu search: ${DOMAIN_ANCHORED_SEARCH ? "on (DOMAIN_ANCHORED_SEARCH=0 to disable)" : "off"}`);
   console.log(`DNS MX check (drop bad domains): ${VERIFY_MX ? "on" : "off (VERIFY_MX=1)"}`);
+  console.log(
+    `Embedding scorer: ${EMBEDDING_PROVIDER}${EMBEDDING_PROVIDER === "openai" && !OPENAI_API_KEY ? " (OPENAI_API_KEY missing; using local fallback vectors)" : ""}`
+  );
   console.log(`People crawl: depth ${CRAWL_PEOPLE_DEPTH}, max ${CRAWL_PEOPLE_MAX_PAGES} page(s); subdomain cap ${SUBDOMAIN_CONTACT_CAP} contact(s)/host\n`);
 
   let all = [];
+  let allExcluded = [];
   let allInferred = [];
   if (opts.start > 0 && fs.existsSync(opts.out)) {
     try {
@@ -2442,6 +2716,15 @@ async function runBatch(opts) {
       console.log(`Resuming: loaded ${allInferred.length} inferred → ${opts.inferredOut}\n`);
     } catch {
       allInferred = [];
+    }
+  }
+  if (opts.start > 0 && fs.existsSync(opts.excludedOut)) {
+    try {
+      allExcluded = JSON.parse(fs.readFileSync(opts.excludedOut, "utf8"));
+      if (!Array.isArray(allExcluded)) allExcluded = [];
+      console.log(`Resuming: loaded ${allExcluded.length} excluded → ${opts.excludedOut}\n`);
+    } catch {
+      allExcluded = [];
     }
   }
 
@@ -2515,17 +2798,21 @@ async function runBatch(opts) {
         console.log("  (no result URLs — try again later or increase searches)");
       } else {
         console.log(`  Found ${urls.length} page(s) to scrape`);
-        await processUrls(browser, urls, displayName, all, allInferred, tierList, {
+        await processUrls(browser, urls, displayName, all, allExcluded, allInferred, tierList, {
           seenEmails,
           subdomainCounts,
         });
       }
 
       const deduped = dedupeContactsByEmail(all);
-      const dedupInf = dedupeContactsByEmail(allInferred);
+      const dedupExc = dedupeContactsStable(allExcluded);
+      const dedupInf = dedupeContactsStable(allInferred);
       atomicWriteJson(opts.out, deduped);
+      atomicWriteJson(opts.excludedOut, dedupExc);
       atomicWriteJson(opts.inferredOut, dedupInf);
-      console.log(`  💾 ${deduped.length} confirmed → ${opts.out}; ${dedupInf.length} inferred → ${opts.inferredOut}`);
+      console.log(
+        `  💾 ${deduped.length} confirmed → ${opts.out}; ${dedupExc.length} excluded → ${opts.excludedOut}; ${dedupInf.length} inferred → ${opts.inferredOut}`
+      );
 
       await sleep(opts.delayMs);
     }
@@ -2534,22 +2821,28 @@ async function runBatch(opts) {
   }
 
   const final = dedupeContactsByEmail(all);
-  const finalInf = dedupeContactsByEmail(allInferred);
+  const finalExc = dedupeContactsStable(allExcluded);
+  const finalInf = dedupeContactsStable(allInferred);
   atomicWriteJson(opts.out, final);
+  atomicWriteJson(opts.excludedOut, finalExc);
   atomicWriteJson(opts.inferredOut, finalInf);
-  console.log(`\n✅ Done. ${final.length} confirmed → ${opts.out}; ${finalInf.length} inferred → ${opts.inferredOut}`);
+  console.log(
+    `\n✅ Done. ${final.length} confirmed → ${opts.out}; ${finalExc.length} excluded → ${opts.excludedOut}; ${finalInf.length} inferred → ${opts.inferredOut}`
+  );
 }
 
 async function runSingle(opts) {
   fs.mkdirSync(path.dirname(opts.out) || ".", { recursive: true });
+  fs.mkdirSync(path.dirname(opts.excludedOut) || ".", { recursive: true });
   fs.mkdirSync(path.dirname(opts.inferredOut) || ".", { recursive: true });
   const browser = await chromium.launch(chromiumLaunchOptions());
   const all = [];
+  const allExcluded = [];
   const allInferred = [];
   const seenEmails = new Set();
   const subdomainCounts = new Map();
   try {
-    await processUrls(browser, opts.urls, opts.university || "", all, allInferred, normalizeTiers(opts.tiers), {
+    await processUrls(browser, opts.urls, opts.university || "", all, allExcluded, allInferred, normalizeTiers(opts.tiers), {
       seenEmails,
       subdomainCounts,
     });
@@ -2557,8 +2850,11 @@ async function runSingle(opts) {
     await browser.close();
   }
   atomicWriteJson(opts.out, dedupeContactsByEmail(all));
-  atomicWriteJson(opts.inferredOut, dedupeContactsByEmail(allInferred));
-  console.log(`\nWrote ${all.length} confirmed → ${opts.out}; ${allInferred.length} inferred → ${opts.inferredOut}`);
+  atomicWriteJson(opts.excludedOut, dedupeContactsStable(allExcluded));
+  atomicWriteJson(opts.inferredOut, dedupeContactsStable(allInferred));
+  console.log(
+    `\nWrote ${all.length} confirmed → ${opts.out}; ${allExcluded.length} excluded → ${opts.excludedOut}; ${allInferred.length} inferred → ${opts.inferredOut}`
+  );
 }
 
 async function main() {
@@ -2583,9 +2879,12 @@ Usage — you do NOT need to paste URLs per school for batch runs.
 
   Options:
     --data PATH              default data/universities.json
-    --out PATH               default output/gemini_contacts.json (literal-email / higher-trust rows)
-    --inferred-out PATH      default output/inferred_contacts.json (LLM-only email evidence)
-    CONTACT_SCORER=regex|llm|auto   post-extract mandate filter (default auto)
+    --out PATH               default output/contacts.json (included + confirmed email)
+    --excluded-out PATH      default output/excluded.json (excluded contacts + reasons)
+    --inferred-out PATH      default output/inferred.json (include=true, email missing)
+    EMBEDDING_PROVIDER=openai|local  scoring backend (default openai)
+    EMBEDDING_INCLUDE_THRESHOLD=0.72 include threshold for embedding similarity
+    CONTACT_SCORER=regex|llm|auto   legacy post-extract mandate filter (default auto)
     --tiers 1,2,5            which T1–T9 search templates to run (default ${DEFAULT_TIERS.join(",")})
     --max N                  only first N schools (after --start)
     --start N                skip first N schools (resume)
