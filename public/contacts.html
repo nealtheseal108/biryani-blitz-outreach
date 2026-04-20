@@ -698,6 +698,7 @@ let contactChecks = {};
 let checkSaveTimer = null;
 let emptyServerPullStreak = 0;
 const DEMO_MODE = new URLSearchParams(window.location.search).get('demo') === '1';
+let demoRunIsActive = false;
 
 /** Unique key for Done checkbox + persistence: real email when present, else university+name. */
 function stableContactKey(c) {
@@ -931,6 +932,10 @@ function render() {
       : `${allContacts.length} contacts`;
 
   if (allContacts.length === 0) {
+    if (DEMO_MODE && demoRunIsActive) {
+      container.innerHTML = '<div class="empty">Demo run in progress... terminal is still streaming fake scrape steps. Contacts appear automatically right after the run finishes.</div>';
+      return;
+    }
     container.innerHTML = '<div class="empty">No contacts yet. Run a scrape from the <a href="/" style="color:var(--accent)">run panel</a> — results load here automatically when the job writes to the server.</div>';
     return;
   }
@@ -1101,12 +1106,29 @@ async function bootstrap() {
   try {
     await pullContactsFromServer();
   } catch (_) {}
+  const refreshRunState = async () => {
+    if (!DEMO_MODE) return;
+    try {
+      const r = await fetch('/api/status');
+      if (!r.ok) return;
+      const j = await r.json();
+      const next = !!j.running;
+      if (next !== demoRunIsActive) {
+        demoRunIsActive = next;
+        render();
+      }
+    } catch (_) {}
+  };
+  await refreshRunState();
   document.getElementById('mainTable').addEventListener('change', onContactCheckChange);
   updateStats();
   render();
   setInterval(() => {
     pullContactsFromServer().catch(() => {});
   }, 8000);
+  setInterval(() => {
+    refreshRunState().catch(() => {});
+  }, 1500);
 }
 
 bootstrap();

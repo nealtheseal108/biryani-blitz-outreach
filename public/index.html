@@ -723,11 +723,17 @@ UC Berkeley"></textarea>
         lastLogLines = j.lines || [];
         const transparent = [];
         const signal = [];
+        const stripMsTimings = (line) =>
+          String(line || "")
+            .replace(/\s+in\s+\d+ms\b/gi, "")
+            .replace(/\b\d+ms\b/gi, "");
         for (const line of lastLogLines) {
           const s = String(line || "");
-          const clean = s
+          const clean = stripMsTimings(
+            s
             .replace(/\bTier filter:/g, "Category filter:")
-            .replace(/\bTier URL coverage:/g, "Category URL coverage:");
+            .replace(/\bTier URL coverage:/g, "Category URL coverage:")
+          );
           // Keep only exact scrape targets shown by the scraper: "    → https://..."
           if (/\s→\shttps?:\/\//.test(clean)) transparent.push(clean);
           // Also keep high-signal lifecycle/error lines so panel never appears silently stuck.
