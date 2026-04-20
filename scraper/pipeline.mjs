@@ -35,6 +35,18 @@ function dedupeLoose(rows) {
   return out;
 }
 
+function dedupeUrlRows(rows) {
+  const seen = new Set();
+  const out = [];
+  for (const row of rows || []) {
+    const key = String(row?.url || "").trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
+
 function round4(n) {
   const x = Number(n);
   if (!Number.isFinite(x)) return 0;
@@ -43,10 +55,13 @@ function round4(n) {
 
 export async function runPipeline(university, opts) {
   const { browser, llmClient, embeddingClient, tiers, maxPages } = opts;
+  console.log(`  → resolve university domain`);
   const { domain } = await resolveUniversityDomain(university, llmClient);
+  console.log(`  → domain: ${domain || "(unknown)"}`);
   const allUrls = [];
   const perTierPages = Math.max(1, Math.ceil(maxPages / Math.max(1, (tiers || []).length)));
   for (const tier of tiers || []) {
+    console.log(`  → tier T${tier}: hypothesis + name-first search`);
     const hypothesis = await resolvePersonForTier(university, domain, tier, llmClient);
     const tierNameFirst = buildNameFirstQueries(hypothesis, university, domain);
     const tierUrls = await discoverUrlsForUniversity({
@@ -59,9 +74,11 @@ export async function runPipeline(university, opts) {
       nameFirstQueries: tierNameFirst,
       hypothesis: { ...hypothesis, tier },
     });
+    console.log(`    T${tier} URLs: ${tierUrls.length}`);
     allUrls.push(...tierUrls);
   }
-  const urls = dedupeLoose(allUrls);
+  const urls = dedupeUrlRows(allUrls);
+  console.log(`  → total deduped URLs: ${urls.length}`);
 
   const scorer = new ContactScorer(embeddingClient);
   await scorer.initialize();
@@ -72,8 +89,10 @@ export async function runPipeline(university, opts) {
   const leads = [];
 
   for (const u of urls) {
+    console.log(`    scrape: ${u.url}`);
     const snapshot = await fetchWithEmailExtraction(browser, u.url, u.tier, university.name);
     const candidates = await extractCandidates(snapshot, llmClient);
+    console.log(`      candidates: ${candidates.length}`);
     for (const candidate of candidates) {
       let working = { ...candidate };
       if (!working.email && working.name) {
