@@ -56,26 +56,40 @@ function round4(n) {
 export async function runPipeline(university, opts) {
   const { browser, llmClient, embeddingClient, tiers, maxPages } = opts;
   console.log(`  → resolve university domain`);
-  const { domain } = await resolveUniversityDomain(university, llmClient);
+  const fallbackDomain = `${String(university?.name || "campus")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "")}.edu`;
+  let domain = fallbackDomain;
+  try {
+    const resolved = await resolveUniversityDomain(university, llmClient);
+    domain = String(resolved?.domain || fallbackDomain).trim() || fallbackDomain;
+  } catch (e) {
+    console.log(`  ↪ domain resolve fallback: ${String(e?.message || e).slice(0, 140)}`);
+    domain = fallbackDomain;
+  }
   console.log(`  → domain: ${domain || "(unknown)"}`);
   const allUrls = [];
   const perTierPages = Math.max(1, Math.ceil(maxPages / Math.max(1, (tiers || []).length)));
   for (const tier of tiers || []) {
     console.log(`  → tier T${tier}: hypothesis + name-first search`);
-    const hypothesis = await resolvePersonForTier(university, domain, tier, llmClient);
-    const tierNameFirst = buildNameFirstQueries(hypothesis, university, domain);
-    const tierUrls = await discoverUrlsForUniversity({
-      browser,
-      university,
-      tiers: [tier],
-      llmClient,
-      pagesPerSchool: perTierPages,
-      primaryDomain: domain,
-      nameFirstQueries: tierNameFirst,
-      hypothesis: { ...hypothesis, tier },
-    });
-    console.log(`    T${tier} URLs: ${tierUrls.length}`);
-    allUrls.push(...tierUrls);
+    try {
+      const hypothesis = await resolvePersonForTier(university, domain, tier, llmClient);
+      const tierNameFirst = buildNameFirstQueries(hypothesis, university, domain);
+      const tierUrls = await discoverUrlsForUniversity({
+        browser,
+        university,
+        tiers: [tier],
+        llmClient,
+        pagesPerSchool: perTierPages,
+        primaryDomain: domain,
+        nameFirstQueries: tierNameFirst,
+        hypothesis: { ...hypothesis, tier },
+      });
+      console.log(`    T${tier} URLs: ${tierUrls.length}`);
+      allUrls.push(...tierUrls);
+    } catch (e) {
+      console.log(`    ↪ tier T${tier} search failed: ${String(e?.message || e).slice(0, 180)}`);
+    }
   }
   const urls = dedupeUrlRows(allUrls);
   console.log(`  → total deduped URLs: ${urls.length}`);
