@@ -696,7 +696,6 @@ let uniRankMap = {};
 /** @type {Record<string, boolean>} */
 let contactChecks = {};
 let checkSaveTimer = null;
-let emptyServerPullStreak = 0;
 const DEMO_MODE = new URLSearchParams(window.location.search).get('demo') === '1';
 let demoRunIsActive = false;
 
@@ -991,12 +990,12 @@ function render() {
           : '';
       return `<tr>
         ${checkCell}
+        <td class="email-cell">${emailHtml}</td>
         <td>${tierPill(c.tier)}</td>
         <td class="name-cell">${escapeHtml(c.name) || '—'}</td>
         <td>${escapeHtml(c.title) || '—'}</td>
         <td>${verifiedBio}</td>
         <td class="notes-cell"><div class="note-bio">${bio}</div><div class="note-rel">${relPreview}</div>${briefBlock}</td>
-        <td class="email-cell">${emailHtml}</td>
         <td>${phoneHtml}</td>
         <td><span class="${confClass}"><span class="conf-dot"></span><span class="conf-text">${escapeHtml(c.confidence) || '—'}</span></span></td>
       </tr>`;
@@ -1018,10 +1017,10 @@ function render() {
         <table>
           <thead><tr>
             <th class="th-check" title="You’ve reached out">Done</th>
-            <th>Category</th><th>Name</th><th>Title</th>
+            <th>Email</th><th>Category</th><th>Name</th><th>Title</th>
             <th>Verified bio</th>
             <th>Bio &amp; relevance</th>
-            <th>Email</th><th>Phone</th><th>Conf.</th>
+            <th>Phone</th><th>Conf.</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
@@ -1079,12 +1078,9 @@ async function pullContactsFromServer() {
   const data = await r.json();
   if (!Array.isArray(data)) return;
   const next = data.map(normalizeContact);
-  if (next.length === 0 && allContacts.length > 0) {
-    emptyServerPullStreak += 1;
-    if (emptyServerPullStreak < 3) return;
-  } else {
-    emptyServerPullStreak = 0;
-  }
+  // Keep existing dashboard rows stable during/after runs; only replace with
+  // empty data on a fresh page load.
+  if (next.length === 0 && allContacts.length > 0) return;
   if (contactListSignature(next) === contactListSignature(allContacts) && next.length === allContacts.length) {
     return;
   }
