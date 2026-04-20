@@ -255,6 +255,8 @@ app.post("/api/start", (req, res) => {
     path.join(ROOT, "output", "excluded.json"),
     "--inferred-out",
     path.join(ROOT, "output", "inferred.json"),
+    "--leads-out",
+    path.join(ROOT, "output", "leads.json"),
     "--tiers",
     [...new Set(tiers)].sort((a, b) => a - b).join(","),
   ];

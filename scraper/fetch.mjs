@@ -54,6 +54,51 @@ function mergeEmailSources(mailtos, htmlEmails, bodyText) {
   return [...map.values()];
 }
 
+export function findEmailsNearName(bodyText, personName) {
+  const text = String(bodyText || "");
+  const parts = String(personName || "")
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (!text || !parts.length) return [];
+  const lastName = parts[parts.length - 1];
+  const idx = text.toLowerCase().indexOf(lastName);
+  if (idx < 0) return [];
+  const window = text.slice(Math.max(0, idx - 250), Math.min(text.length, idx + 250));
+  const EMAIL_REGEX = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
+  const matches = window.match(EMAIL_REGEX) || [];
+  return [...new Set(matches.map(normalizeEmail))].filter((e) => e && !/example\.|noreply/i.test(e));
+}
+
+export function generateEmailFormats(fullName, domain) {
+  const parts = String(fullName || "")
+    .toLowerCase()
+    .replace(/[^a-z\s-]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length < 2 || !domain) return [];
+  const first = parts[0];
+  const last = parts[parts.length - 1];
+  const fi = first[0];
+  const li = last[0];
+  return [
+    `${first}.${last}@${domain}`,
+    `${fi}${last}@${domain}`,
+    `${last}@${domain}`,
+    `${first}${last}@${domain}`,
+    `${first}${li}@${domain}`,
+    `${last}.${first}@${domain}`,
+  ];
+}
+
+export async function resolveEmailForPerson(person, domain, snapshot) {
+  const near = findEmailsNearName(snapshot?.bodyText || "", person?.name || "");
+  if (near.length) return { email: near[0], confidence: "high", source: snapshot?.finalUrl || snapshot?.url || "" };
+  const infer = generateEmailFormats(person?.name || "", domain);
+  if (infer.length) return { email: infer[0], confidence: "inferred", source: "format_inference" };
+  return { email: null, confidence: "inferred", source: "none" };
+}
+
 export async function fetchWithEmailExtraction(browser, url, tier = null, university = "") {
   const page = await browser.newPage();
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });

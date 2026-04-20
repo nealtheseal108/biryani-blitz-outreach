@@ -93,7 +93,7 @@
   h1 span {
     display: block;
     font-family: var(--font);
-    font-size: 0.7rem;
+    font-size: 0.84rem;
     font-weight: 500;
     color: var(--accent);
     letter-spacing: 0.12em;
@@ -562,10 +562,10 @@
   }
   .wrapper { z-index: 1; }
   .embedded-mode .wrapper {
-    padding-top: 0.85rem;
-    padding-left: 0.75rem;
-    padding-right: 0.75rem;
-    padding-bottom: 1.1rem;
+    padding-top: 1.25rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    padding-bottom: 1.4rem;
     max-width: none;
   }
   .embedded-mode .stats-bar {
@@ -751,6 +751,7 @@ function normalizeContact(raw) {
     embedding_similarity: raw.embedding_similarity ?? '',
     include: raw.include === false ? false : true,
     exclude_reason: raw.exclude_reason || '',
+    specific_reason: raw.specific_reason || '',
   };
 }
 
@@ -959,6 +960,13 @@ function render() {
         : '<td class="td-check"><input type="checkbox" class="contact-done contact-done-disabled" disabled title="No name or university on this row" aria-label="Cannot mark — missing row id" /></td>';
 
       const bio = (c.bio_snippet && String(c.bio_snippet).trim()) ? escapeHtml(c.bio_snippet) : '—';
+      const verifiedBioRaw = String(c.specific_reason || c.bio_snippet || '').trim();
+      const verifiedBio =
+        verifiedBioRaw.length > 120
+          ? `${escapeHtml(verifiedBioRaw.slice(0, 117))}…`
+          : verifiedBioRaw
+            ? escapeHtml(verifiedBioRaw)
+            : '—';
       const whyRaw = String(c.relevance_to_biryani_blitz || c.relevance_note || '').trim();
       const relPreview =
         whyRaw.length > 140 ? `${escapeHtml(whyRaw.slice(0, 137))}…` : whyRaw ? escapeHtml(whyRaw) : '—';
@@ -980,6 +988,7 @@ function render() {
         <td>${tierPill(c.tier)}</td>
         <td class="name-cell">${escapeHtml(c.name) || '—'}</td>
         <td>${escapeHtml(c.title) || '—'}</td>
+        <td>${verifiedBio}</td>
         <td class="notes-cell"><div class="note-bio">${bio}</div><div class="note-rel">${relPreview}</div>${briefBlock}</td>
         <td class="email-cell">${emailHtml}</td>
         <td>${phoneHtml}</td>
@@ -1004,6 +1013,7 @@ function render() {
           <thead><tr>
             <th class="th-check" title="You’ve reached out">Done</th>
             <th>Category</th><th>Name</th><th>Title</th>
+            <th>Verified bio</th>
             <th>Bio &amp; relevance</th>
             <th>Email</th><th>Phone</th><th>Conf.</th>
           </tr></thead>
@@ -1029,7 +1039,7 @@ function toggleAll(expand) {
 function exportCSV() {
   const filtered = getFiltered();
   if (!filtered.length) return;
-  const headers = ['university','tier','tier_label','name','title','bio_snippet','relevance_note','relevance_to_biryani_blitz','outreach_angle','suggested_subject_line','externality_score','decision_proximity_score','embedding_similarity','include','exclude_reason','department','email','phone','confidence','source_url','contacted'];
+  const headers = ['university','tier','tier_label','name','title','specific_reason','bio_snippet','relevance_note','relevance_to_biryani_blitz','outreach_angle','suggested_subject_line','externality_score','decision_proximity_score','embedding_similarity','include','exclude_reason','department','email','phone','confidence','source_url','contacted'];
   const esc = v => `"${String(v ?? '').replace(/"/g,'""')}"`;
   const rows = [headers.join(','), ...filtered.map(c => {
     const row = headers.map(h => {

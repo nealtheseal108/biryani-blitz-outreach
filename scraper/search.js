@@ -7,6 +7,7 @@ import {
   withTimeout,
 } from "../lib/serp.mjs";
 import { extractJSONObject } from "../lib/json-utils.mjs";
+import { buildNameFirstQueries, resolvePersonForTier } from "./resolve.mjs";
 
 const TIER_TERMS = {
   1: ["commercial activities", "vendor partnerships", "auxiliary enterprises"],
@@ -55,13 +56,16 @@ export function buildDomainAnchoredQueries(domain, tier) {
 
 export async function discoverUrlsForUniversity({ browser, university, tiers, llmClient, pagesPerSchool = 8 }) {
   const { domain, searchName } = await resolveUniversityDomain(university, llmClient);
+  const enrichedUni = { ...university, searchName };
   const context = await browser.newContext();
   const page = await context.newPage();
   const useDuckDuckGo = process.env.SEARCH_DDG === "1";
   const urls = [];
   try {
     for (const t of tiers || []) {
-      const queries = buildDomainAnchoredQueries(domain, t);
+      const hypothesis = await resolvePersonForTier(enrichedUni, domain, t, llmClient);
+      let queries = buildNameFirstQueries(hypothesis, enrichedUni, domain);
+      if (!queries.length) queries = buildDomainAnchoredQueries(domain, t);
       for (const q of queries) {
         let links = [];
         try {
@@ -93,8 +97,11 @@ export async function discoverUrlsForUniversity({ browser, university, tiers, ll
   const deduped = dedupeUrlStrings(urls.map((u) => u.url));
   const firstByUrl = new Map();
   for (const u of urls) {
-    if (!firstByUrl.has(u.url)) firstByUrl.set(u.url, u);
+    const k = dedupeUrlStrings([u.url])[0] || u.url;
+    if (!firstByUrl.has(k)) firstByUrl.set(k, u);
   }
-  return deduped.slice(0, pagesPerSchool).map((url) => firstByUrl.get(url) || { url, tier: null, query: "", university: searchName });
+  return deduped
+    .slice(0, pagesPerSchool)
+    .map((url) => firstByUrl.get(url) || { url, tier: null, query: "", university: searchName });
 }
 

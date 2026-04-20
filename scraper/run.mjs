@@ -15,6 +15,7 @@ function parseArgs() {
     out: path.join("output", "contacts.json"),
     excludedOut: path.join("output", "excluded.json"),
     inferredOut: path.join("output", "inferred.json"),
+    leadsOut: path.join("output", "leads.json"),
     tiers: [1, 2, 3, 4, 5, 6, 7, 8, 9],
     max: null,
     start: 0,
@@ -28,6 +29,7 @@ function parseArgs() {
     else if (a === "--out") opts.out = args[++i] || opts.out;
     else if (a === "--excluded-out") opts.excludedOut = args[++i] || opts.excludedOut;
     else if (a === "--inferred-out") opts.inferredOut = args[++i] || opts.inferredOut;
+    else if (a === "--leads-out") opts.leadsOut = args[++i] || opts.leadsOut;
     else if (a === "--max") opts.max = parseInt(args[++i], 10);
     else if (a === "--start") opts.start = parseInt(args[++i], 10) || 0;
     else if (a === "--pages-per-school") opts.pagesPerSchool = parseInt(args[++i], 10) || opts.pagesPerSchool;
@@ -58,6 +60,7 @@ async function main() {
   const allConfirmed = [];
   const allExcluded = [];
   const allInferred = [];
+  const allLeads = [];
 
   try {
     for (let i = 0; i < list.length; i++) {
@@ -65,7 +68,7 @@ async function main() {
       const name = String(university?.name || "").trim();
       if (!name) continue;
       console.log(`\n━━ ${i + 1}/${list.length} ${name} ━━`);
-      const { confirmed, excluded, inferred } = await runPipeline(university, {
+      const { confirmed, excluded, inferred, leads } = await runPipeline(university, {
         browser,
         llmClient,
         embeddingClient,
@@ -75,11 +78,13 @@ async function main() {
       allConfirmed.push(...confirmed);
       allExcluded.push(...excluded);
       allInferred.push(...inferred);
+      allLeads.push(...(leads || []));
       atomicWriteJson(opts.out, allConfirmed);
       atomicWriteJson(opts.excludedOut, allExcluded);
       atomicWriteJson(opts.inferredOut, allInferred);
+      atomicWriteJson(opts.leadsOut, allLeads);
       console.log(
-        `  ✓ ${confirmed.length} confirmed, ${excluded.length} excluded, ${inferred.length} inferred (running totals: ${allConfirmed.length}/${allExcluded.length}/${allInferred.length})`
+        `  ✓ ${confirmed.length} confirmed, ${excluded.length} excluded, ${inferred.length} inferred, ${leads?.length || 0} leads (running totals: ${allConfirmed.length}/${allExcluded.length}/${allInferred.length}/${allLeads.length})`
       );
       if (opts.delayMs > 0) await sleep(opts.delayMs);
     }
@@ -90,10 +95,12 @@ async function main() {
   atomicWriteJson(opts.out, allConfirmed);
   atomicWriteJson(opts.excludedOut, allExcluded);
   atomicWriteJson(opts.inferredOut, allInferred);
+  atomicWriteJson(opts.leadsOut, allLeads);
   console.log(`\n✅ Done.`);
   console.log(`  confirmed -> ${opts.out}`);
   console.log(`  excluded  -> ${opts.excludedOut}`);
   console.log(`  inferred  -> ${opts.inferredOut}`);
+  console.log(`  leads     -> ${opts.leadsOut}`);
 }
 
 main().catch((e) => {

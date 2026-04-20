@@ -1,8 +1,9 @@
 import { discoverUrlsForUniversity } from "./search.mjs";
-import { fetchWithEmailExtraction } from "./fetch.mjs";
+import { fetchWithEmailExtraction, resolveEmailForPerson } from "./fetch.mjs";
 import { extractCandidates } from "./extract.mjs";
-import { ContactScorer } from "./score.mjs";
+import { ContactScorer, scoreBioRelevance } from "./score.mjs";
 import { generateBrief } from "./brief.mjs";
+import { resolveUniversityDomain } from "./search.mjs";
 
 function dedupeByEmail(rows) {
   const seen = new Set();
@@ -35,6 +36,7 @@ function dedupeLoose(rows) {
 
 export async function runPipeline(university, opts) {
   const { browser, llmClient, embeddingClient, tiers, maxPages } = opts;
+  const { domain } = await resolveUniversityDomain(university, llmClient);
   const urls = await discoverUrlsForUniversity({
     browser,
     university,
@@ -49,21 +51,56 @@ export async function runPipeline(university, opts) {
   const confirmed = [];
   const excluded = [];
   const inferred = [];
+  const leads = [];
 
   for (const u of urls) {
     const snapshot = await fetchWithEmailExtraction(browser, u.url, u.tier, university.name);
     const candidates = await extractCandidates(snapshot, llmClient);
     for (const candidate of candidates) {
-      const scored = await scorer.scoreContact(candidate);
-      if (!scored.include) {
-        excluded.push(scored);
+      let working = { ...candidate };
+      if (!working.email && working.name) {
+        const resolved = await resolveEmailForPerson(working, domain, snapshot);
+        if (resolved.email) {
+          working = {
+            ...working,
+            email: resolved.email,
+            confidence: resolved.confidence,
+            email_source: resolved.source,
+          };
+        }
+      }
+
+      const scored = await scorer.scoreContact(working);
+      const bioScore = await scoreBioRelevance(scored, llmClient);
+      const merged = {
+        ...scored,
+        include: bioScore.include === true && scored.include !== false,
+        externality_score: Number(bioScore.externality_score ?? scored.externality_score ?? 0),
+        decision_proximity: Number(bioScore.decision_proximity ?? scored.decision_proximity ?? 0),
+        specific_reason: bioScore.specific_reason || scored.exclude_reason || "",
+      };
+
+      if (!merged.include) {
+        excluded.push({
+          ...merged,
+          exclude_reason: merged.exclude_reason || merged.specific_reason || "scored out",
+        });
+        if (bioScore.forward_to_title) {
+          leads.push({
+            university: university.name,
+            domain,
+            title: bioScore.forward_to_title,
+            discoveredVia: merged.name || merged.email || merged.title || "unknown",
+            source_url: merged.source_url || snapshot.finalUrl,
+          });
+        }
         continue;
       }
-      if (!scored.email) {
-        inferred.push({ ...scored, confidence: scored.confidence || "inferred" });
+      if (!merged.email) {
+        inferred.push({ ...merged, confidence: merged.confidence || "inferred" });
         continue;
       }
-      const briefed = await generateBrief(scored, llmClient);
+      const briefed = await generateBrief(merged, llmClient);
       confirmed.push(briefed);
     }
   }
@@ -72,6 +109,7 @@ export async function runPipeline(university, opts) {
     confirmed: dedupeByEmail(confirmed),
     excluded: dedupeLoose(excluded),
     inferred: dedupeLoose(inferred),
+    leads: dedupeLoose(leads),
   };
 }
 

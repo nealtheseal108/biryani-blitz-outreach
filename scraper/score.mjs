@@ -10,6 +10,18 @@ const IDEAL_CONTACT_EMBEDDINGS = {
   9: "An environmental health and safety coordinator who processes food safety permits and inspects food equipment for compliance",
 };
 
+function parseJsonObject(text) {
+  const clean = String(text || "").replace(/```json\n?|```\n?/g, "").trim();
+  const s = clean.indexOf("{");
+  const e = clean.lastIndexOf("}");
+  if (s < 0 || e <= s) return null;
+  try {
+    return JSON.parse(clean.slice(s, e + 1));
+  } catch {
+    return null;
+  }
+}
+
 function cosineSimilarity(a, b) {
   if (!Array.isArray(a) || !Array.isArray(b) || !a.length || !b.length) return 0;
   const n = Math.min(a.length, b.length);
@@ -41,6 +53,26 @@ function scoreExcludeReason(contact, similarity) {
   if (!contact.email) return "email not found on page";
   if (similarity < 0.5) return "no external vendor mandate";
   return "below similarity threshold";
+}
+
+function fallbackBioScore(contact, embeddingSimilarity) {
+  const title = String(contact.title || "").toLowerCase();
+  const vendorish =
+    /\b(vendor|commercial|partnership|student union|auxiliar|dining|events|engagement|student government|ehs|food safety|permits?)\b/i.test(
+      `${contact.title || ""} ${contact.department || ""} ${contact.pageContext || ""}`
+    );
+  const include = vendorish && embeddingSimilarity >= 0.52;
+  return {
+    vendor_decision_role: include ? "yes" : "unclear",
+    right_person: include ? "yes" : "no",
+    forward_to_title: include ? null : /assistant|coordinator/.test(title) ? "Director of Commercial Services" : null,
+    specific_reason: include
+      ? "Role appears student-facing or vendor-facing based on title/context."
+      : "Role does not clearly indicate external vendor or student-facing ownership.",
+    include,
+    externality_score: Number(Math.max(0, Math.min(1, embeddingSimilarity)).toFixed(4)),
+    decision_proximity: Number(Math.max(0, Math.min(1, embeddingSimilarity * 0.85)).toFixed(4)),
+  };
 }
 
 export class ContactScorer {
@@ -86,6 +118,50 @@ export class ContactScorer {
       include,
       exclude_reason: include ? null : scoreExcludeReason(contact, bestSimilarity),
     };
+  }
+}
+
+export async function scoreBioRelevance(contact, llmClient) {
+  const emb = Number(contact.embedding_similarity || 0);
+  if (!llmClient) return fallbackBioScore(contact, emb);
+  const prompt = `
+You are a business development researcher for Biryani Blitz assessing whether to cold email this university staff member.
+
+Biryani Blitz seeks student union/commercial placement approvals, food safety pre-clearance, and student champions.
+
+Person:
+Name: ${contact.name || ""}
+Title: ${contact.title || ""}
+Department: ${contact.department || ""}
+Bio / page context: ${contact.bio || contact.pageContext || ""}
+University: ${contact.university || ""}
+Page URL: ${contact.source_url || ""}
+
+Return ONLY JSON:
+{
+  "vendor_decision_role": "yes|no|unclear",
+  "right_person": "yes|forward|no",
+  "forward_to_title": "title or null",
+  "specific_reason": "one sentence citing this person's role/context",
+  "include": true|false,
+  "externality_score": 0.0-1.0,
+  "decision_proximity": 0.0-1.0
+}`;
+  try {
+    const raw = await llmClient.complete(prompt, { temperature: 0.1, maxTokens: 700 });
+    const parsed = parseJsonObject(raw);
+    if (!parsed || typeof parsed !== "object") return fallbackBioScore(contact, emb);
+    return {
+      vendor_decision_role: parsed.vendor_decision_role || "unclear",
+      right_person: parsed.right_person || "no",
+      forward_to_title: parsed.forward_to_title || null,
+      specific_reason: parsed.specific_reason || "",
+      include: parsed.include === true,
+      externality_score: Number(parsed.externality_score ?? emb) || 0,
+      decision_proximity: Number(parsed.decision_proximity ?? emb * 0.8) || 0,
+    };
+  } catch {
+    return fallbackBioScore(contact, emb);
   }
 }
 
